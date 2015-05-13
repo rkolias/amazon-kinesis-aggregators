@@ -16,6 +16,7 @@
  */
 package com.amazonaws.services.kinesis.aggregators;
 
+import java.util.Arrays;
 import com.amazonaws.services.kinesis.model.Record;
 
 public class InputEvent {
@@ -52,4 +53,34 @@ public class InputEvent {
     public byte[] getData() {
         return data;
     }
+
+	/**
+	 * @see java.lang.Object#toString()
+	 */
+	@Override
+	public String toString()
+	{
+		final int maxLen = 10;
+		StringBuilder builder = new StringBuilder();
+		builder.append("InputEvent [");
+		if (this.sequenceNumber != null)
+		{
+			builder.append("sequenceNumber=");
+			builder.append(this.sequenceNumber);
+			builder.append(", ");
+		}
+		if (this.partitionKey != null)
+		{
+			builder.append("partitionKey=");
+			builder.append(this.partitionKey);
+			builder.append(", ");
+		}
+		if (this.data != null)
+		{
+			builder.append("data=");
+			builder.append(Arrays.toString(Arrays.copyOf(this.data, Math.min(this.data.length, maxLen))));
+		}
+		builder.append("]");
+		return builder.toString();
+	}
 }

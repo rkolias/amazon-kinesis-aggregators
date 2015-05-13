@@ -22,10 +22,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import com.amazonaws.services.kinesis.aggregators.AggregateData;
 import com.amazonaws.services.kinesis.aggregators.AggregatorType;
 import com.amazonaws.services.kinesis.aggregators.InputEvent;
@@ -57,12 +55,12 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
     private JsonDataExtractor() {
     }
 
-    public JsonDataExtractor(List<String> labelAttributes) {
+    public JsonDataExtractor(final List<String> labelAttributes) {
         this.labelAttributes = labelAttributes;
         this.labelName = LabelSet.fromStringKeys(labelAttributes).getName();
     }
 
-    public JsonDataExtractor(List<String> labelAttributes, JsonSerializer serialiser) {
+    public JsonDataExtractor(final List<String> labelAttributes, final JsonSerializer serialiser) {
         this(labelAttributes);
         this.serialiser = serialiser;
     }
@@ -71,22 +69,24 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * {@inheritDoc}
      */
     @Override
-    public List<AggregateData> getData(InputEvent event) throws SerializationException {
+    public List<AggregateData> getData(final InputEvent event) throws SerializationException {
         try {
             List<AggregateData> aggregateData = new ArrayList<>();
             Date dateValue = null;
             JsonNode jsonContent = null;
             String dateString, summary = null;
-            sumUpdates = new HashMap<>();
+            this.sumUpdates = new HashMap<>();
 
-            List<String> items = (List<String>) serialiser.toClass(event);
+            List<String> items = (List<String>) this.serialiser.toClass(event);
 
             // log a warning if we didn't get anything back from the serialiser
             // - this could be OK, but probably isn't
             if (items == null || items.size() == 0)
-                LOG.warn(String.format(
+			{
+				this.LOG.warn(String.format(
                         "Failed to deserialise any content for Record (Partition Key %s, Sequence %s",
                         event.getPartitionKey(), event.getSequenceNumber()));
+			}
 
             // process all the items returned by the serialiser
             for (String item : items) {
@@ -110,33 +110,35 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
                             break;
                         default:
                             uniqueId = StreamAggregatorUtils.readValueAsString(jsonContent,
-                                    uniqueIdAttribute);
+                                    this.uniqueIdAttribute);
                             break;
                     }
                 }
 
                 // get the date value from the line
-                if (dateValueAttribute != null) {
+                if (this.dateValueAttribute != null) {
                     dateString = StreamAggregatorUtils.readValueAsString(jsonContent,
-                            dateValueAttribute);
+                            this.dateValueAttribute);
 
                     // bail on no date returned
                     if (dateString == null || dateString.equals(""))
-                        throw new SerializationException(String.format(
+					{
+						throw new SerializationException(String.format(
                                 "Unable to read date value attribute %s from JSON Content %s",
-                                dateValueAttribute, item));
+                                this.dateValueAttribute, item));
+					}
 
                     // turn date as long or string into Date
                     if (this.dateFormat != null) {
-                        dateValue = dateFormatter.parse(dateString);
+                        dateValue = this.dateFormatter.parse(dateString);
                     } else {
                         // no formatter, so treat as epoch seconds
                         try {
                             dateValue = new Date(Long.parseLong(dateString));
                         } catch (Exception e) {
-                            LOG.error(String.format(
+                            this.LOG.error(String.format(
                                     "Unable to create Date Value element from item '%s' due to invalid format as Epoch Seconds",
-                                    dateValueAttribute));
+                                    this.dateValueAttribute));
                             throw new SerializationException(e);
                         }
                     }
@@ -148,16 +150,18 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
                 // get the summed values
                 if (this.aggregatorType.equals(AggregatorType.SUM)) {
                     // get the positional sum items
-                    for (String s : summaryConfig.getItemSet()) {
+                    for (String s : this.summaryConfig.getItemSet()) {
                         try {
                             summary = StreamAggregatorUtils.readValueAsString(jsonContent, s);
 
                             // if a summary is not found in the data element,
                             // then we simply continue without it
                             if (summary != null)
-                                sumUpdates.put(s, Double.parseDouble(summary));
+							{
+								this.sumUpdates.put(s, Double.parseDouble(summary));
+							}
                         } catch (NumberFormatException nfe) {
-                            LOG.error(String.format(
+                            this.LOG.error(String.format(
                                     "Unable to deserialise Summary '%s' due to NumberFormatException",
                                     s));
                             throw new SerializationException(nfe);
@@ -165,7 +169,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
                     }
                 }
 
-                aggregateData.add(new AggregateData(uniqueId, labels, dateValue, sumUpdates));
+                aggregateData.add(new AggregateData(uniqueId, labels, dateValue, this.sumUpdates));
             }
 
             return aggregateData;
@@ -175,7 +179,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
     }
 
     /** Builder method to add the attribute which is the event unique id */
-    public JsonDataExtractor withUniqueIdAttribute(String uniqueIdAttribute) {
+    public JsonDataExtractor withUniqueIdAttribute(final String uniqueIdAttribute) {
         this.uniqueIdAttribute = uniqueIdAttribute;
 
         return this;
@@ -189,9 +193,11 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      *        item.
      * @return
      */
-    public JsonDataExtractor withDateValueAttribute(String dateValueAttribute) {
+    public JsonDataExtractor withDateValueAttribute(final String dateValueAttribute) {
         if (dateValueAttribute != null)
-            this.dateValueAttribute = dateValueAttribute;
+		{
+			this.dateValueAttribute = dateValueAttribute;
+		}
         return this;
     }
 
@@ -203,7 +209,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * @param dateFormat Date Format in {@link java.text.SimpleDateFormat} form.
      * @return
      */
-    public JsonDataExtractor withDateFormat(String dateFormat) {
+    public JsonDataExtractor withDateFormat(final String dateFormat) {
         if (dateFormat != null && !dateFormat.equals("")) {
             this.dateFormat = dateFormat;
             this.dateFormatter = new SimpleDateFormat(dateFormat);
@@ -211,7 +217,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
         return this;
     }
 
-    public JsonDataExtractor withSerialiser(JsonSerializer serialiser) {
+    public JsonDataExtractor withSerialiser(final JsonSerializer serialiser) {
         this.serialiser = serialiser;
         return this;
     }
@@ -225,7 +231,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * @return
      * @throws UnsupportedCalculationException
      */
-    public JsonDataExtractor withSummaryAttributes(List<String> summaryAttributes)
+    public JsonDataExtractor withSummaryAttributes(final List<String> summaryAttributes)
             throws UnsupportedCalculationException {
         if (summaryAttributes != null) {
             this.aggregatorType = AggregatorType.SUM;
@@ -244,7 +250,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      *        to be subject to data extraction.
      * @return
      */
-    public JsonDataExtractor withRegexFilter(String filterRegex) {
+    public JsonDataExtractor withRegexFilter(final String filterRegex) {
         if (filterRegex != null) {
             this.serialiser.withFilterRegex(filterRegex);
         }
@@ -257,7 +263,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * @param lineTerminator The characters used for delimiting lines of text
      * @return
      */
-    public JsonDataExtractor withItemTerminator(String lineTerminator) {
+    public JsonDataExtractor withItemTerminator(final String lineTerminator) {
         if (lineTerminator != null) {
             this.serialiser.withItemTerminator(lineTerminator);
         }
@@ -305,6 +311,10 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
         }
     }
 
+    /**
+     * @see com.amazonaws.services.kinesis.io.IDataExtractor#copy()
+     */
+    @Override
     public IDataExtractor copy() throws Exception {
         return new JsonDataExtractor(this.labelAttributes, this.serialiser).withDateFormat(
                 this.dateFormat).withDateValueAttribute(this.dateValueAttribute).withSummaryAttributes(

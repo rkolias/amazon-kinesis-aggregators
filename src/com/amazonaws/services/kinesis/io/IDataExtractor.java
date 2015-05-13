@@ -17,7 +17,6 @@
 package com.amazonaws.services.kinesis.io;
 
 import java.util.List;
-
 import com.amazonaws.services.kinesis.aggregators.AggregateData;
 import com.amazonaws.services.kinesis.aggregators.AggregatorType;
 import com.amazonaws.services.kinesis.aggregators.InputEvent;
@@ -87,4 +86,6 @@ public interface IDataExtractor {
     public SummaryConfiguration getSummaryConfig();
 
     public IDataExtractor copy() throws Exception;
+    
+    
 }

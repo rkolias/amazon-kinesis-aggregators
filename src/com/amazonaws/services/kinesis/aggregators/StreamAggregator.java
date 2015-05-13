@@ -23,10 +23,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
@@ -144,7 +142,7 @@ public class StreamAggregator implements IStreamAggregator {
 
     private boolean isFirstShardWorker = false;
 
-    private final Log LOG = LogFactory.getLog(StreamAggregator.class);
+    private static final Log LOG = LogFactory.getLog(StreamAggregator.class);
 
     private Region region = null;
 
@@ -171,13 +169,15 @@ public class StreamAggregator implements IStreamAggregator {
     private int ignoredRecordsBelowHWM = 0;
 
     private boolean publishMetrics = false;
+    
+    private String tagAttrib;
 
     /**
      * Copy Constructor
      * 
      * @param template
      */
-    public StreamAggregator(StreamAggregator template) throws Exception {
+    public StreamAggregator(final StreamAggregator template) throws Exception {
         this.streamName = template.streamName;
         this.applicationName = template.applicationName;
         this.namespace = template.namespace;
@@ -193,10 +193,11 @@ public class StreamAggregator implements IStreamAggregator {
             this.publishMetrics = true;
             this.metricsEmitter = template.metricsEmitter;
         }
+        this.withTagAttrib(template.getTagAttrib());
     }
 
-    public StreamAggregator(String streamName, String applicationName, String namespace,
-            KinesisClientLibConfiguration config, IDataExtractor dataExtractor) {
+    public StreamAggregator(final String streamName, final String applicationName, final String namespace,
+            final KinesisClientLibConfiguration config, final IDataExtractor dataExtractor) {
         this.streamName = streamName;
         this.applicationName = applicationName;
         this.namespace = namespace;
@@ -204,53 +205,59 @@ public class StreamAggregator implements IStreamAggregator {
         this.dataExtractor = dataExtractor;
     }
 
-    public void checkpoint() throws Exception {
-        cache.flush();
-        lowSeq = null;
+    @Override
+	public void checkpoint() throws Exception {
+        this.cache.flush();
+        this.lowSeq = null;
 
         // update the worker inventory showing progress to the last sequence
         // value
-        inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
+        this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
                 this.lowSeq, this.highSeq.toString(), System.currentTimeMillis(),
                 InventoryModel.STATE.RUNNING);
 
         // warn and reset if there were any ignored records
-        if (ignoredRecordsBelowHWM > 0) {
+        if (this.ignoredRecordsBelowHWM > 0) {
             logWarn(String.format(
                     "Processed %s records which were ignored due to being below the current processing HWM",
-                    ignoredRecordsBelowHWM));
-            ignoredRecordsBelowHWM = 0;
+                    this.ignoredRecordsBelowHWM));
+            this.ignoredRecordsBelowHWM = 0;
         }
 
-        LOG.debug("Aggregator Checkpoint for Shard " + this.shardId + " Complete");
+        this.LOG.debug("Aggregator Checkpoint for Shard " + this.shardId + " Complete");
     }
 
     /*
      * builder methods
      */
-    public StreamAggregator withStorageCapacity(Long readCapacity, Long writeCapacity) {
+    public StreamAggregator withStorageCapacity(final Long readCapacity, final Long writeCapacity) {
         if (readCapacity != null)
-            this.readCapacity = readCapacity;
+		{
+			this.readCapacity = readCapacity;
+		}
         if (writeCapacity != null)
-            this.writeCapacity = writeCapacity;
+		{
+			this.writeCapacity = writeCapacity;
+		}
 
         return this;
     }
 
-    private void logInfo(String message) {
-        LOG.info("[" + this.shardId + "] " + message);
+    private void logInfo(final String message) {
+        this.LOG.info("[" + this.shardId + "] " + message);
     }
 
-    private void logWarn(String message) {
-        LOG.warn("[" + this.shardId + "] " + message);
+    private void logWarn(final String message) {
+        this.LOG.warn("[" + this.shardId + "] " + message);
     }
 
-    private void logWarn(String message, Exception e) {
-        LOG.warn("[" + this.shardId + "] " + message);
-        LOG.error(e);
+    private void logWarn(final String message, final Exception e) {
+        this.LOG.warn("[" + this.shardId + "] " + message);
+        this.LOG.error(e);
     }
 
-    public void initialize(String shardId) throws Exception {
+    @Override
+	public void initialize(final String shardId) throws Exception {
         // Set System properties to allow entity expansion of unlimited items in
         // response documents from AWS API
         //
@@ -266,8 +273,8 @@ public class StreamAggregator implements IStreamAggregator {
         AmazonKinesisClient kinesisClient = new AmazonKinesisClient(
                 this.config.getKinesisCredentialsProvider());
         if (this.config.getRegionName() != null) {
-            region = Region.getRegion(Regions.fromName(this.config.getRegionName()));
-            kinesisClient.setRegion(region);
+            this.region = Region.getRegion(Regions.fromName(this.config.getRegionName()));
+            kinesisClient.setRegion(this.region);
         }
 
         try {
@@ -288,8 +295,10 @@ public class StreamAggregator implements IStreamAggregator {
         }
 
         if (this.dataExtractor == null)
-            throw new InvalidConfigurationException(
+		{
+			throw new InvalidConfigurationException(
                     "Unable to create Aggregator Instance without a configured IDataStore");
+		}
 
         // set the aggregator type on the data extractor
         this.dataExtractor.setAggregatorType(this.aggregatorType);
@@ -299,18 +308,22 @@ public class StreamAggregator implements IStreamAggregator {
         ClientConfiguration clientConfig = new ClientConfiguration().withSocketTimeout(60000);
         this.dynamoClient = new AmazonDynamoDBAsyncClient(
                 this.config.getDynamoDBCredentialsProvider(), clientConfig);
-        if (region != null)
-            this.dynamoClient.setRegion(region);
+        if (this.region != null)
+		{
+			this.dynamoClient.setRegion(this.region);
+		}
 
         this.kinesisClient = new AmazonKinesisClient(this.config.getKinesisCredentialsProvider());
-        if (region != null)
-            this.kinesisClient.setRegion(region);
+        if (this.region != null)
+		{
+			this.kinesisClient.setRegion(this.region);
+		}
 
-        inventory = new InventoryModel(this.dynamoClient);
+        this.inventory = new InventoryModel(this.dynamoClient);
 
         // get the latest sequence number checkpointed for this named aggregator
         // on this shard
-        InventoryStatus lastUpdate = inventory.getLastUpdate(this.streamName, this.applicationName,
+        InventoryStatus lastUpdate = this.inventory.getLastUpdate(this.streamName, this.applicationName,
                 this.namespace, this.shardId);
         if (lastUpdate != null && lastUpdate.getHighSeq() != null) {
             // set the current high sequence to the last high sequence
@@ -318,37 +331,43 @@ public class StreamAggregator implements IStreamAggregator {
         }
 
         // log that we are now starting up
-        inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId, null,
+        this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId, null,
                 null, System.currentTimeMillis(), InventoryModel.STATE.STARTING);
 
         // set the table name we will use for aggregated values
         if (this.tableName == null) {
-            this.tableName = StreamAggregatorUtils.getTableName(config.getApplicationName(),
+            this.tableName = StreamAggregatorUtils.getTableName(this.config.getApplicationName(),
                     this.getNamespace());
         }
 
         if (this.environment != null && !this.environment.equals(""))
-            this.tableName = String.format("%s.%s", this.environment, this.tableName);
+		{
+			this.tableName = String.format("%s.%s", this.environment, this.tableName);
+		}
 
         // resolve the basic data being aggregated
-        String labelColumn = StreamAggregatorUtils.methodToColumn(dataExtractor.getAggregateLabelName());
-        String dateColumn = dataExtractor.getDateValueName() == null ? DEFAULT_DATE_VALUE
-                : dataExtractor.getDateValueName();
+        String labelColumn = StreamAggregatorUtils.methodToColumn(this.dataExtractor.getAggregateLabelName());
+        String dateColumn = this.dataExtractor.getDateValueName() == null ? DEFAULT_DATE_VALUE
+                : this.dataExtractor.getDateValueName();
 
         // configure the default dynamo data store
         if (this.dataStore == null) {
             this.dataStore = new DynamoDataStore(this.dynamoClient, this.kinesisClient,
                     this.aggregatorType, this.streamName, this.tableName, labelColumn, dateColumn).withStorageCapacity(
-                    this.readCapacity, this.writeCapacity);
-            this.dataStore.setRegion(region);
+                    this.readCapacity, this.writeCapacity)
+                    .withTagAttrib(this.tagAttrib);
+            this.dataStore.setRegion(this.region);
+            
+            LOG.debug("Init data store, using tag name: " + this.tagAttrib);
         }
         this.dataStore.initialise();
-
+        
         // configure the cache so it can do its work
-        cache = new AggregateCache(this.shardId).withCredentials(
+        this.cache = new AggregateCache(this.shardId).withCredentials(
                 this.config.getKinesisCredentialsProvider()).withAggregateType(this.aggregatorType).withTableName(
                 this.tableName).withLabelColumn(labelColumn).withDateColumn(dateColumn).withDataStore(
-                this.dataStore);
+                this.dataStore)
+                .withTagAttrib(this.tagAttrib);
 
         // create a cloudwatch client for the cache to publish against if needed
         if (this.publishMetrics && this.metricsEmitter == null) {
@@ -358,37 +377,42 @@ public class StreamAggregator implements IStreamAggregator {
 
         if (this.metricsEmitter != null) {
             if (this.config.getRegionName() != null)
-                this.metricsEmitter.setRegion(region);
+			{
+				this.metricsEmitter.setRegion(this.region);
+			}
         }
         // add the metrics publisher to the cache if we are bound to the lowest
         // shard
         if (this.metricsEmitter != null) {
-            cache.withMetricsEmitter(this.metricsEmitter);
+            this.cache.withMetricsEmitter(this.metricsEmitter);
         }
-        cache.initialise();
+        this.cache.initialise();
+        
 
         // set the user agent
         StringBuilder userAgent = new StringBuilder(ClientConfiguration.DEFAULT_USER_AGENT);
         userAgent.append(" ");
-        userAgent.append(this.AWSApplication);
+        userAgent.append(StreamAggregator.AWSApplication);
         userAgent.append("/");
-        userAgent.append(this.version);
+        userAgent.append(StreamAggregator.version);
         this.config.getKinesisClientConfiguration().setUserAgent(userAgent.toString());
 
         // log startup state
         StringBuffer sb = new StringBuffer();
-        for (TimeHorizon t : timeHorizons) {
+        for (TimeHorizon t : this.timeHorizons) {
             sb.append(String.format("%s,", t.name()));
         }
         sb.deleteCharAt(sb.length() - 1);
 
         logInfo(String.format(
                 "Amazon Kinesis Stream Aggregator Online\nStream: %s\nApplication: %s\nNamespace: %s\nWorker: %s\nGranularity: %s\nContent Extracted With: %s",
-                streamName, applicationName, this.namespace, this.config.getWorkerIdentifier(),
-                sb.toString(), dataExtractor.getClass().getName()));
+                this.streamName, this.applicationName, this.namespace, this.config.getWorkerIdentifier(),
+                sb.toString(), this.dataExtractor.getClass().getName()));
         if (this.highSeq != null)
-            logInfo(String.format("Processing Data from Seq: %s", this.highSeq));
-        online = true;
+		{
+			logInfo(String.format("Processing Data from Seq: %s", this.highSeq));
+		}
+        this.online = true;
     }
 
     private void validateConfig() throws Exception {
@@ -413,9 +437,11 @@ public class StreamAggregator implements IStreamAggregator {
      * @param horizon TimeHorizon value to be used for aggregated data
      * @return
      */
-    public StreamAggregator withTimeHorizon(TimeHorizon horizon) {
+    public StreamAggregator withTimeHorizon(final TimeHorizon horizon) {
         if (this.timeHorizons == null)
-            this.timeHorizons = new ArrayList<>();
+		{
+			this.timeHorizons = new ArrayList<>();
+		}
 
         this.timeHorizons.add(horizon);
 
@@ -430,7 +456,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param horizon TimeHorizon value to be used for aggregated data
      * @return
      */
-    public StreamAggregator withTimeHorizon(List<TimeHorizon> horizons) {
+    public StreamAggregator withTimeHorizon(final List<TimeHorizon> horizons) {
         if (this.timeHorizons == null) {
             this.timeHorizons = horizons;
         } else {
@@ -448,9 +474,11 @@ public class StreamAggregator implements IStreamAggregator {
      * @param horizon TimeHorizon value to be used for aggregated data
      * @return
      */
-    public StreamAggregator withTimeHorizon(TimeHorizon... horizons) {
+    public StreamAggregator withTimeHorizon(final TimeHorizon... horizons) {
         if (this.timeHorizons == null)
-            this.timeHorizons = new ArrayList<>();
+		{
+			this.timeHorizons = new ArrayList<>();
+		}
 
         for (TimeHorizon t : horizons) {
             this.timeHorizons.add(t);
@@ -465,7 +493,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param tableName The table name to use for data storage
      * @return
      */
-    public StreamAggregator withTableName(String tableName) {
+    public StreamAggregator withTableName(final String tableName) {
         this.tableName = tableName;
         return this;
     }
@@ -478,7 +506,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param t The Aggregator Type to use
      * @return
      */
-    public StreamAggregator withAggregatorType(AggregatorType t) {
+    public StreamAggregator withAggregatorType(final AggregatorType t) {
         if (t != null) {
             this.aggregatorType = t;
         }
@@ -495,7 +523,7 @@ public class StreamAggregator implements IStreamAggregator {
      *        on the stream and cannot be deserialised
      * @return
      */
-    public StreamAggregator withRaiseExceptionOnDataExtractionErrors(boolean bool) {
+    public StreamAggregator withRaiseExceptionOnDataExtractionErrors(final boolean bool) {
         this.raiseExceptionOnDataExtractionErrors = bool;
         return this;
     }
@@ -517,7 +545,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param dataStore
      * @return
      */
-    public StreamAggregator withDataStore(IDataStore dataStore) {
+    public StreamAggregator withDataStore(final IDataStore dataStore) {
         if (dataStore != null) {
             this.dataStore = dataStore;
         }
@@ -530,7 +558,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param metricsEmitter
      * @return
      */
-    public StreamAggregator withMetricsEmitter(IMetricsEmitter metricsEmitter) {
+    public StreamAggregator withMetricsEmitter(final IMetricsEmitter metricsEmitter) {
         if (metricsEmitter != null) {
             this.metricsEmitter = metricsEmitter;
         }
@@ -543,19 +571,19 @@ public class StreamAggregator implements IStreamAggregator {
      * @param idempotencyCheck
      * @return
      */
-    public StreamAggregator withIdempotencyCheck(IIdempotencyCheck idempotencyCheck) {
+    public StreamAggregator withIdempotencyCheck(final IIdempotencyCheck idempotencyCheck) {
         if (idempotencyCheck != null) {
             this.idempotencyCheck = idempotencyCheck;
         }
         return this;
     }
 
-    public StreamAggregator withEnvironment(EnvironmentType environment) {
+    public StreamAggregator withEnvironment(final EnvironmentType environment) {
         this.environment = environment.name();
         return this;
     }
 
-    public StreamAggregator withEnvironment(String environment) {
+    public StreamAggregator withEnvironment(final String environment) {
         this.environment = environment;
         return this;
     }
@@ -573,7 +601,8 @@ public class StreamAggregator implements IStreamAggregator {
         return this.dataStore;
     }
 
-    public String getTableName() {
+    @Override
+	public String getTableName() {
         return this.tableName;
     }
 
@@ -614,25 +643,31 @@ public class StreamAggregator implements IStreamAggregator {
         shutdown(true);
     }
 
-    public void shutdown(boolean flushState) throws Exception {
+    @Override
+	public void shutdown(final boolean flushState) throws Exception {
         shutdown(flushState, null);
     }
 
-    public void shutdown(boolean flushState, InventoryModel.STATE withState) throws Exception {
+    public void shutdown(final boolean flushState, final InventoryModel.STATE withState) throws Exception {
         if (flushState)
-            checkpoint();
+		{
+			checkpoint();
+		}
 
-        if (inventory != null)
-            inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
+        if (this.inventory != null)
+		{
+			this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
                     null, null, System.currentTimeMillis(),
                     withState == null ? InventoryModel.STATE.STOPPED : withState);
+		}
 
     }
 
     /**
      * {@inheritDoc}
      */
-    public void aggregate(List<Record> records) throws Exception {
+    @Override
+	public void aggregate(final List<Record> records) throws Exception {
         List<InputEvent> events = new ArrayList<>();
 
         for (Record r : records) {
@@ -645,12 +680,13 @@ public class StreamAggregator implements IStreamAggregator {
     /**
      * {@inheritDoc}
      */
-    public void aggregateEvents(List<InputEvent> events) throws Exception {
-        start = System.currentTimeMillis();
+    @Override
+	public void aggregateEvents(final List<InputEvent> events) throws Exception {
+        this.start = System.currentTimeMillis();
         int aggregatedEventCount = 0;
         int aggregatedElementCount = 0;
 
-        if (!online) {
+        if (!this.online) {
             throw new Exception("Aggregator Not Initialised");
         }
 
@@ -668,23 +704,25 @@ public class StreamAggregator implements IStreamAggregator {
                     // ignore any records which are going backward with regard
                     // to
                     // the current hwm
-                    if (highSeq != null && highSeq.compareTo(thisSequence) != -1) {
-                        ignoredRecordsBelowHWM++;
+                    if (this.highSeq != null && this.highSeq.compareTo(thisSequence) != -1) {
+                        this.ignoredRecordsBelowHWM++;
                         continue;
                     }
                 }
 
                 // set the low sequence if this is the first record received
                 // after a flush
-                if (lowSeq == null)
-                    lowSeq = event.getSequenceNumber();
+                if (this.lowSeq == null)
+				{
+					this.lowSeq = event.getSequenceNumber();
+				}
 
                 // high sequence is always the latest value
-                highSeq = new BigInteger(event.getSequenceNumber());
+                this.highSeq = new BigInteger(event.getSequenceNumber());
 
                 // extract the data from the input event
                 try {
-                    extractedItems = dataExtractor.getData(event);
+                    extractedItems = this.dataExtractor.getData(event);
                 } catch (SerializationException se) {
                     // customer may have elected to suppress serialisation
                     // errors if the stream is expected have heterogenous data
@@ -725,15 +763,19 @@ public class StreamAggregator implements IStreamAggregator {
 
                         // generate the local updates, one per time horizon that
                         // is requested
-                        for (TimeHorizon h : timeHorizons) {
+                        for (TimeHorizon h : this.timeHorizons) {
                             // atomically update the aggregate table with event
                             // count or count + summaries
-                            cache.update(
-                                    aggregatorType,
+                            this.cache.update(
+                                    this.aggregatorType,
                                     data.getLabels(),
-                                    (timeHorizons.size() > 1 ? h.getItemWithMultiValueFormat(eventDate)
-                                            : h.getValue(eventDate)), h, event.getSequenceNumber(),
-                                    1, data.getSummaries(), dataExtractor.getSummaryConfig());
+                                    (this.timeHorizons.size() > 1 ? h.getItemWithMultiValueFormat(eventDate) : h.getValue(eventDate)),
+                                    h,
+                                    event.getSequenceNumber(),
+                                    1,
+                                    data.getSummaries(),
+                                    this.dataExtractor.getSummaryConfig(),
+                                    data.getTagValue());
                         }
                     }
                 }
@@ -741,14 +783,14 @@ public class StreamAggregator implements IStreamAggregator {
 
             logInfo(String.format("Aggregation Complete - %s Records and %s Elements in %s ms",
                     aggregatedEventCount, aggregatedElementCount,
-                    (System.currentTimeMillis() - start)));
+                    (System.currentTimeMillis() - this.start)));
         } catch (SerializationException se) {
             shutdown(true, InventoryModel.STATE.SERIALISATION_ERROR);
-            LOG.error(se);
+            this.LOG.error(se);
             throw se;
         } catch (Exception e) {
             shutdown(true, InventoryModel.STATE.UNKNOWN_ERROR);
-            LOG.error(e);
+            this.LOG.error(e);
             throw e;
         }
     }
@@ -762,8 +804,8 @@ public class StreamAggregator implements IStreamAggregator {
      * @param h The Time Horizon to query
      * @return
      */
-    public List<Map<String, AttributeValue>> queryValue(String label, Date dateValue,
-            ComparisonOperator comp) throws Exception {
+    public List<Map<String, AttributeValue>> queryValue(final String label, final Date dateValue,
+            final ComparisonOperator comp) throws Exception {
         if (!(this.dataStore instanceof DynamoDataStore)) {
             throw new Exception("Unable to Query by Date unless Data Store is Dynamo DB");
         }
@@ -786,8 +828,8 @@ public class StreamAggregator implements IStreamAggregator {
      * @return A list of data stored in Dynamo DB for the time range
      * @throws Exception
      */
-    public List<Map<String, AttributeValue>> queryByDate(Date dateValue, TimeHorizon h,
-            ComparisonOperator comp, int threads) throws Exception {
+    public List<Map<String, AttributeValue>> queryByDate(final Date dateValue, final TimeHorizon h,
+            final ComparisonOperator comp, final int threads) throws Exception {
         if (!(this.dataStore instanceof DynamoDataStore)) {
             throw new Exception("Unable to Query by Date unless Data Store is Dynamo DB");
         }
@@ -817,7 +859,7 @@ public class StreamAggregator implements IStreamAggregator {
         return items;
     }
 
-    public List<TableKeyStructure> parallelQueryKeys(QueryKeyScope scope, int threads)
+    public List<TableKeyStructure> parallelQueryKeys(final QueryKeyScope scope, final int threads)
             throws Exception {
         if (!(this.dataStore instanceof DynamoDataStore)) {
             throw new Exception("Unable to Query Keys unless Data Store is Dynamo DB");
@@ -827,4 +869,26 @@ public class StreamAggregator implements IStreamAggregator {
                 this.tableName, scope.toString(), threads));
         return ((DynamoDataStore) this.dataStore).queryEngine().parallelQueryKeys(scope, threads);
     }
+    
+    /**
+     * Set the optional tag attribute name for the aggregate data.
+     * @param attribName the attrib name
+     * @return this (fluent builder pattern)
+     */
+    public StreamAggregator withTagAttrib(final String attribName)
+    {
+    	this.tagAttrib = attribName;
+    	
+    	LOG.debug("using tag attrib name: " + attribName);
+    	
+    	return this;
+    }
+
+	/**
+	 * @return the tagAttrib
+	 */
+	public String getTagAttrib()
+	{
+		return this.tagAttrib;
+	}
 }

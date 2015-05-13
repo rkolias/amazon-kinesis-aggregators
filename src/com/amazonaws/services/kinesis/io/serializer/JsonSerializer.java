@@ -21,7 +21,6 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
-
 import com.amazonaws.services.kinesis.aggregators.InputEvent;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -55,7 +54,7 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
      * 
      * @param itemTerminator
      */
-    public JsonSerializer(String itemTerminator) {
+    public JsonSerializer(final String itemTerminator) {
         this.itemTerminator = itemTerminator;
     }
 
@@ -64,12 +63,13 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
      * 
      * @param clazz
      */
-    public JsonSerializer(Class clazz) {
+    public JsonSerializer(final Class clazz) {
         this.clazz = clazz;
-        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        this.mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
-    @SuppressWarnings("unchecked")
+    @Override
+	@SuppressWarnings("unchecked")
     /**
      * Method to generate either a class instance from a Kinesis Record, or a String which will be converted to JsonMap if we are serialising text based payloads
      */
@@ -84,7 +84,7 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
                 String[] items = new String(event.getData(), this.charset).split(this.itemTerminator);
 
                 for (String item : items) {
-                    if (filterRegex == null || (filterRegex != null && p.matcher(item).matches())) {
+                    if (this.filterRegex == null || (this.filterRegex != null && this.p.matcher(item).matches())) {
                         jsonStringList.add(item);
                     }
                 }
@@ -94,7 +94,7 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
                 // single json object per record
                 String item = new String(event.getData(), this.charset);
 
-                if (filterRegex == null || (filterRegex != null && p.matcher(item).matches())) {
+                if (this.filterRegex == null || (this.filterRegex != null && this.p.matcher(item).matches())) {
                     jsonStringList.add(item);
                 }
 
@@ -102,7 +102,7 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
             }
         } else {
             // use jackson to serialise a class instance
-            return mapper.readValue(event.getData(), clazz);
+            return this.mapper.readValue(new String(event.getData(), this.charset), this.clazz);
         }
     }
 
@@ -111,11 +111,12 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
      * upon the serialiser config as either an object serialiser or a string
      * serialiser
      */
-    public byte[] fromClass(final Object o) throws IOException {
+    @Override
+	public byte[] fromClass(final Object o) throws IOException {
         if (this.clazz == null) {
             return SerializationUtils.safeReturnData(((String) o).getBytes(this.charset));
         } else {
-            return SerializationUtils.safeReturnData(mapper.writeValueAsBytes(o));
+            return SerializationUtils.safeReturnData(this.mapper.writeValueAsBytes(o));
         }
     }
 
@@ -126,9 +127,9 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
      * @param regex
      * @return
      */
-    public JsonSerializer withFilterRegex(String regex) {
+    public JsonSerializer withFilterRegex(final String regex) {
         this.filterRegex = regex;
-        p = Pattern.compile(this.filterRegex);
+        this.p = Pattern.compile(this.filterRegex);
 
         return this;
     }
@@ -140,7 +141,7 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
      * @param charset
      * @return
      */
-    public JsonSerializer withCharset(String charset) {
+    public JsonSerializer withCharset(final String charset) {
         // test that this is a valid character set
         Charset test = Charset.forName(charset);
 
@@ -156,7 +157,7 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
      * @param itemTerminator
      * @return
      */
-    public JsonSerializer withItemTerminator(String itemTerminator) {
+    public JsonSerializer withItemTerminator(final String itemTerminator) {
         this.itemTerminator = itemTerminator;
         return this;
     }

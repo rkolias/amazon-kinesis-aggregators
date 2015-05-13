@@ -23,10 +23,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import com.amazonaws.services.kinesis.aggregators.AggregateData;
 import com.amazonaws.services.kinesis.aggregators.AggregatorType;
 import com.amazonaws.services.kinesis.aggregators.InputEvent;
@@ -63,10 +61,12 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
     private Object eventDate;
 
     private Map<String, Method> sumValueMap;
+    
+    private List<String> summaryMethodNameList;
 
     private Object summaryValue;
 
-    private final Log LOG = LogFactory.getLog(ObjectExtractor.class);
+    private static final Log LOG = LogFactory.getLog(ObjectExtractor.class);
 
     private Date dateValue;
 
@@ -77,11 +77,13 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
     private List<AggregateData> data;
 
     private boolean validated = false;
+    
+    private String tagMethodName;
 
     private ObjectExtractor() {
     }
 
-    public ObjectExtractor(Class clazz) throws Exception {
+    public ObjectExtractor(final Class clazz) throws Exception {
         AnnotationProcessor p = new AnnotationProcessor(clazz);
         this.aggregateLabelMethods = p.getLabelMethodNames();
 
@@ -109,11 +111,10 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      * @param clazz The base class used for deserialisation and accessed using
      *        configured accessor methods.
      */
-    public ObjectExtractor(List<String> aggregateLabelMethods, Class clazz) throws Exception {
+    public ObjectExtractor(final List<String> aggregateLabelMethods, final Class clazz) throws Exception {
         this(aggregateLabelMethods, clazz, null);
-
     }
-
+    
     /**
      * Create an Object Extractor using indicated serialisation for the class.
      * 
@@ -125,8 +126,8 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      *        binary Kinesis format and the required Object format indicated by
      *        the base class.
      */
-    public ObjectExtractor(List<String> aggregateLabelMethodNames, Class clazz,
-            IKinesisSerializer<Object, byte[]> serialiser) throws Exception {
+    public ObjectExtractor(final List<String> aggregateLabelMethodNames, final Class clazz,
+            final IKinesisSerializer<Object, byte[]> serialiser) throws Exception {
         this.clazz = clazz;
 
         if (serialiser == null) {
@@ -158,7 +159,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      */
     @Override
     public void validate() throws Exception {
-        if (!validated) {
+        if (!this.validated) {
             // validate sum config
             if ((this.aggregatorType.equals(AggregatorType.SUM)) && this.sumValueMap == null) {
                 throw new Exception(
@@ -168,20 +169,20 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
             if (this.aggregatorType.equals(AggregatorType.SUM)) {
                 for (String s : this.sumValueMap.keySet()) {
                     try {
-                        Method m = clazz.getDeclaredMethod(s);
+                        Method m = this.clazz.getDeclaredMethod(s);
                         m.setAccessible(true);
                         this.sumValueMap.put(s, m);
                     } catch (NoSuchMethodException e) {
-                        LOG.error(e);
+                        this.LOG.error(e);
                         throw e;
                     }
                 }
             }
 
-            LOG.info(String.format("Object Extractor Configuration\n" + "Class: %s\n"
+            this.LOG.info(String.format("Object Extractor Configuration\n" + "Class: %s\n"
                     + "Date Method: %s\n", this.clazz.getSimpleName(), this.dateMethodName));
 
-            validated = true;
+            this.validated = true;
         }
     }
 
@@ -189,8 +190,11 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      * {@inheritDoc}
      */
     @Override
-    public List<AggregateData> getData(InputEvent event) throws SerializationException {
-        if (!validated) {
+    public List<AggregateData> getData(final InputEvent event) throws SerializationException {
+
+        LOG.debug("deserializing instance from input event: " + event);
+    	
+    	if (!this.validated) {
             try {
                 validate();
             } catch (Exception e) {
@@ -200,13 +204,21 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
 
         try {
             List<AggregateData> data = new ArrayList<>();
-
-            Object o = serialiser.toClass(event);
+            
+            LOG.debug("deserializing json from input event: " + new String (event.getData(), "UTF-8"));
+            
+            Object o = this.serialiser.toClass(event);
+            
+            LOG.debug("got deserialized object: " + o);
 
             // get the value of the reflected labels
             LabelSet labels = new LabelSet();
             for (String key : this.aggregateLabelMethods) {
-                labels.put(key, aggregateLabelMethodMap.get(key).invoke(o).toString());
+            	
+            	Method method = this.aggregateLabelMethodMap.get(key);
+            	Object methodReturn = method.invoke(o);
+            	
+                labels.put(key, methodReturn.toString());
             }
 
             // get the unique ID value from the object
@@ -220,7 +232,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
                         uniqueId = event.getSequenceNumber();
                         break;
                     default:
-                        Object id = uniqueIdMethod.invoke(o);
+                        Object id = this.uniqueIdMethod.invoke(o);
                         if (id != null) {
                             uniqueId = id.toString();
                         }
@@ -230,47 +242,68 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
 
             // get the date value from the object
             if (this.dateMethod != null) {
-                eventDate = dateMethod.invoke(o);
+                this.eventDate = this.dateMethod.invoke(o);
 
-                if (eventDate == null) {
-                    dateValue = new Date(System.currentTimeMillis());
+                if (this.eventDate == null) {
+                    this.dateValue = new Date(System.currentTimeMillis());
                 } else {
-                    if (eventDate instanceof Date) {
-                        dateValue = (Date) eventDate;
-                    } else if (eventDate instanceof Long) {
-                        dateValue = new Date((Long) eventDate);
+                    if (this.eventDate instanceof Date) {
+                        this.dateValue = (Date) this.eventDate;
+                    } else if (this.eventDate instanceof Long) {
+                        this.dateValue = new Date((Long) this.eventDate);
                     } else {
                         throw new Exception(String.format(
                                 "Cannot use data type %s for date value on event",
-                                eventDate.getClass().getSimpleName()));
+                                this.eventDate.getClass().getSimpleName()));
                     }
                 }
             }
 
+
+            // add any additional (optional) fields to store along with the record data
+            // this allows metrics to be stored in dynamo and later queried using an alternate key if desired;
+            String tagValue = null;
+            if (this.tagMethodName != null)
+            {
+            	Method tagMethod = this.clazz.getMethod(this.tagMethodName, null);
+            	Object tagValueObj = tagMethod.invoke(o);
+
+            	LOG.debug("called tag method: " + tagMethod + "; got: " + tagValueObj);
+            	
+            	if (tagValueObj != null)
+            	{
+            		tagValue = tagValueObj.toString();
+            	}
+            }
+            
+            
+            
             // extract all summed values from the serialised object
             if (this.aggregatorType.equals(AggregatorType.SUM)) {
                 // lift out the aggregated method value
                 for (String s : this.sumValueMap.keySet()) {
-                    summaryValue = this.sumValueMap.get(s).invoke(o);
+                    this.summaryValue = this.sumValueMap.get(s).invoke(o);
 
-                    if (summaryValue != null) {
-                        if (summaryValue instanceof Double) {
-                            sumUpdates.put(s, (Double) summaryValue);
-                        } else if (summaryValue instanceof Long) {
-                            sumUpdates.put(s, ((Long) summaryValue).doubleValue());
-                        } else if (summaryValue instanceof Integer) {
-                            sumUpdates.put(s, ((Integer) summaryValue).doubleValue());
+                    if (this.summaryValue != null) {
+                        if (this.summaryValue instanceof Double) {
+                            this.sumUpdates.put(s, (Double) this.summaryValue);
+                        } else if (this.summaryValue instanceof Long) {
+                            this.sumUpdates.put(s, ((Long) this.summaryValue).doubleValue());
+                        } else if (this.summaryValue instanceof Integer) {
+                            this.sumUpdates.put(s, ((Integer) this.summaryValue).doubleValue());
                         } else {
                             String msg = String.format(
                                     "Unable to access  Summary %s due to NumberFormatException", s);
-                            LOG.error(msg);
+                            this.LOG.error(msg);
                             throw new SerializationException(msg);
                         }
                     }
                 }
             }
 
-            data.add(new AggregateData(uniqueId, labels, dateValue, sumUpdates));
+            data.add(new AggregateData(uniqueId, labels, this.dateValue, this.sumUpdates)
+            	.withTagValue(tagValue)
+            	);
 
             return data;
         } catch (Exception e) {
@@ -286,7 +319,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      *        the event.
      * @return
      */
-    public ObjectExtractor withDateMethod(String dateMethodName) throws NoSuchMethodException {
+    public ObjectExtractor withDateMethod(final String dateMethodName) throws NoSuchMethodException {
         this.dateMethodName = dateMethodName;
         this.dateValueColumn = StreamAggregatorUtils.methodToColumn(dateMethodName);
         this.dateMethod = this.clazz.getDeclaredMethod(dateMethodName);
@@ -294,7 +327,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         return this;
     }
 
-    public ObjectExtractor withUniqueIdMethod(String uniqueIdMethodName)
+    public ObjectExtractor withUniqueIdMethod(final String uniqueIdMethodName)
             throws NoSuchMethodException {
         this.uniqueIdMethodName = uniqueIdMethodName;
 
@@ -323,13 +356,19 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      * @return
      * @throws UnsupportedCalculationException
      */
-    public ObjectExtractor withSummaryMethods(List<String> summaryMethodName)
+    public ObjectExtractor withSummaryMethods(final List<String> summaryMethodName)
             throws UnsupportedCalculationException {
         if (summaryMethodName != null) {
+        	
+        	// remember for later in copy
+        	this.summaryMethodNameList = summaryMethodName;
+        	
             this.aggregatorType = AggregatorType.SUM;
 
             if (this.sumValueMap == null)
-                this.sumValueMap = new HashMap<>();
+			{
+				this.sumValueMap = new HashMap<>();
+			}
 
             for (String s : summaryMethodName) {
                 this.summaryConfig.withConfigItem(s);
@@ -343,11 +382,13 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         return this;
     }
 
-    public ObjectExtractor withSummaryConfig(SummaryConfiguration config) {
+    public ObjectExtractor withSummaryConfig(final SummaryConfiguration config) {
         this.summaryConfig = config;
 
         if (this.sumValueMap == null)
-            this.sumValueMap = new HashMap<>();
+		{
+			this.sumValueMap = new HashMap<>();
+		}
 
         for (String s : this.summaryConfig.getItemSet()) {
             this.sumValueMap.put(s, null);
@@ -383,8 +424,19 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
                 : this.dateValueColumn;
     }
 
-    public IDataExtractor copy() throws Exception {
-        throw new UnsupportedOperationException();
+    @Override
+	public IDataExtractor copy() throws Exception {
+
+    	ObjectExtractor copy = new ObjectExtractor(
+    		this.aggregateLabelMethods, this.clazz)
+        	.withDateMethod(this.dateMethod.getName())
+        	.withSummaryMethods(this.summaryMethodNameList)
+        	.withTagMethod(this.tagMethodName)
+        	;
+        copy.setAggregatorType(this.aggregatorType);
+        
+    	
+    	return copy;
     }
 
     /**
@@ -397,5 +449,19 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         } else {
             return null;
         }
+    }
+    
+    /**
+     * 
+     * @param tagMethodName
+     * @return
+     */
+    public ObjectExtractor withTagMethod(String tagMethodName)
+    {
+    	this.tagMethodName = tagMethodName;
+    	
+    	LOG.debug("using tag method name: " + tagMethodName);
+    	
+    	return this;
     }
 }

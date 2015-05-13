@@ -31,6 +31,8 @@ public class UpdateKey {
     private String dateValue;
 
     private TimeHorizon timeHorizon;
+    
+    private String tagValue;
 
     public UpdateKey(LabelSet labelValues, String dateAttribute, String dateValue,
             TimeHorizon timeHorizon) {
@@ -88,5 +90,26 @@ public class UpdateKey {
     public String toString() {
         return String.format("Update Key - Date Value: %s, Date Column: %s, Label Values: %s",
                 this.dateValue, this.dateAttribute, this.labelValues);
+    }
+    
+    /**
+     * 
+     * @param value
+     * @return
+     */
+    public UpdateKey withTagValue(String value)
+    {
+    	this.tagValue = value;
+    	
+    	return this;
+    }
+    
+    /**
+     * 
+     * @return
+     */
+    public String getTagValue()
+    {
+    	return this.tagValue;
     }
 }

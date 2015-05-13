@@ -27,8 +27,12 @@ public class AggregateData {
     private Date date;
 
     private Map<String, Double> summaries;
+    
+    private Map<String, String> attribMap;
+    
+    private String tagValue;
 
-    public AggregateData(String uniqueId, LabelSet labels, Date date, Map<String, Double> summaries) {
+    public AggregateData(final String uniqueId, final LabelSet labels, final Date date, final Map<String, Double> summaries) {
         this.uniqueId = uniqueId;
         this.labels = labels;
         this.date = date;
@@ -54,4 +58,42 @@ public class AggregateData {
     public Map<String, Double> getSummaries() {
         return this.summaries;
     }
+
+	/**
+	 * @return the attribMap
+	 */
+	public Map<String, String> getAttribMap()
+	{
+		return this.attribMap;
+	}
+
+	/**
+	 * @param argAttribMap the attribMap to set
+	 */
+	public void setAttribMap(final Map<String, String> argAttribMap)
+	{
+		this.attribMap = argAttribMap;
+	}
+	
+    /**
+     * 
+     * @param value
+     * @return
+     */
+    public AggregateData withTagValue(String value)
+    {
+    	this.tagValue = value;
+    	
+    	return this;
+    }
+    
+    /**
+     * 
+     * @return
+     */
+    public String getTagValue()
+    {
+    	return this.tagValue;
+    }
+	
 }
