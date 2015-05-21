@@ -83,7 +83,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
     private ObjectExtractor() {
     }
 
-    public ObjectExtractor(final Class clazz) throws Exception {
+    public ObjectExtractor(Class clazz) throws Exception {
         AnnotationProcessor p = new AnnotationProcessor(clazz);
         this.aggregateLabelMethods = p.getLabelMethodNames();
 
@@ -111,8 +111,9 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      * @param clazz The base class used for deserialisation and accessed using
      *        configured accessor methods.
      */
-    public ObjectExtractor(final List<String> aggregateLabelMethods, final Class clazz) throws Exception {
+    public ObjectExtractor(List<String> aggregateLabelMethods, Class clazz) throws Exception {
         this(aggregateLabelMethods, clazz, null);
+
     }
     
     /**
@@ -126,8 +127,8 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      *        binary Kinesis format and the required Object format indicated by
      *        the base class.
      */
-    public ObjectExtractor(final List<String> aggregateLabelMethodNames, final Class clazz,
-            final IKinesisSerializer<Object, byte[]> serialiser) throws Exception {
+    public ObjectExtractor(List<String> aggregateLabelMethodNames, Class clazz,
+            IKinesisSerializer<Object, byte[]> serialiser) throws Exception {
         this.clazz = clazz;
 
         if (serialiser == null) {
@@ -159,7 +160,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      */
     @Override
     public void validate() throws Exception {
-        if (!this.validated) {
+        if (!validated) {
             // validate sum config
             if ((this.aggregatorType.equals(AggregatorType.SUM)) && this.sumValueMap == null) {
                 throw new Exception(
@@ -169,20 +170,20 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
             if (this.aggregatorType.equals(AggregatorType.SUM)) {
                 for (String s : this.sumValueMap.keySet()) {
                     try {
-                        Method m = this.clazz.getDeclaredMethod(s);
+                        Method m = clazz.getDeclaredMethod(s);
                         m.setAccessible(true);
                         this.sumValueMap.put(s, m);
                     } catch (NoSuchMethodException e) {
-                        this.LOG.error(e);
+                        LOG.error(e);
                         throw e;
                     }
                 }
             }
 
-            this.LOG.info(String.format("Object Extractor Configuration\n" + "Class: %s\n"
+            LOG.info(String.format("Object Extractor Configuration\n" + "Class: %s\n"
                     + "Date Method: %s\n", this.clazz.getSimpleName(), this.dateMethodName));
 
-            this.validated = true;
+            validated = true;
         }
     }
 
@@ -190,11 +191,11 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      * {@inheritDoc}
      */
     @Override
-    public List<AggregateData> getData(final InputEvent event) throws SerializationException {
+    public List<AggregateData> getData(InputEvent event) throws SerializationException {
 
         LOG.debug("deserializing instance from input event: " + event);
     	
-    	if (!this.validated) {
+    	if (!validated) {
             try {
                 validate();
             } catch (Exception e) {
@@ -207,7 +208,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
             
             LOG.debug("deserializing json from input event: " + new String (event.getData(), "UTF-8"));
             
-            Object o = this.serialiser.toClass(event);
+            Object o = serialiser.toClass(event);
             
             LOG.debug("got deserialized object: " + o);
 
@@ -232,7 +233,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
                         uniqueId = event.getSequenceNumber();
                         break;
                     default:
-                        Object id = this.uniqueIdMethod.invoke(o);
+                        Object id = uniqueIdMethod.invoke(o);
                         if (id != null) {
                             uniqueId = id.toString();
                         }
@@ -242,19 +243,19 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
 
             // get the date value from the object
             if (this.dateMethod != null) {
-                this.eventDate = this.dateMethod.invoke(o);
+                eventDate = dateMethod.invoke(o);
 
-                if (this.eventDate == null) {
-                    this.dateValue = new Date(System.currentTimeMillis());
+                if (eventDate == null) {
+                    dateValue = new Date(System.currentTimeMillis());
                 } else {
-                    if (this.eventDate instanceof Date) {
-                        this.dateValue = (Date) this.eventDate;
-                    } else if (this.eventDate instanceof Long) {
-                        this.dateValue = new Date((Long) this.eventDate);
+                    if (eventDate instanceof Date) {
+                        dateValue = (Date) eventDate;
+                    } else if (eventDate instanceof Long) {
+                        dateValue = new Date((Long) eventDate);
                     } else {
                         throw new Exception(String.format(
                                 "Cannot use data type %s for date value on event",
-                                this.eventDate.getClass().getSimpleName()));
+                                eventDate.getClass().getSimpleName()));
                     }
                 }
             }
@@ -282,26 +283,26 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
             if (this.aggregatorType.equals(AggregatorType.SUM)) {
                 // lift out the aggregated method value
                 for (String s : this.sumValueMap.keySet()) {
-                    this.summaryValue = this.sumValueMap.get(s).invoke(o);
+                    summaryValue = this.sumValueMap.get(s).invoke(o);
 
-                    if (this.summaryValue != null) {
-                        if (this.summaryValue instanceof Double) {
-                            this.sumUpdates.put(s, (Double) this.summaryValue);
-                        } else if (this.summaryValue instanceof Long) {
-                            this.sumUpdates.put(s, ((Long) this.summaryValue).doubleValue());
-                        } else if (this.summaryValue instanceof Integer) {
-                            this.sumUpdates.put(s, ((Integer) this.summaryValue).doubleValue());
+                    if (summaryValue != null) {
+                        if (summaryValue instanceof Double) {
+                            sumUpdates.put(s, (Double) summaryValue);
+                        } else if (summaryValue instanceof Long) {
+                            sumUpdates.put(s, ((Long) summaryValue).doubleValue());
+                        } else if (summaryValue instanceof Integer) {
+                            sumUpdates.put(s, ((Integer) summaryValue).doubleValue());
                         } else {
                             String msg = String.format(
                                     "Unable to access  Summary %s due to NumberFormatException", s);
-                            this.LOG.error(msg);
+                            LOG.error(msg);
                             throw new SerializationException(msg);
                         }
                     }
                 }
             }
 
-            data.add(new AggregateData(uniqueId, labels, this.dateValue, this.sumUpdates)
+            data.add(new AggregateData(uniqueId, labels, dateValue, sumUpdates)
             	.withTagValue(tagValue)
             	);
 
@@ -319,7 +320,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      *        the event.
      * @return
      */
-    public ObjectExtractor withDateMethod(final String dateMethodName) throws NoSuchMethodException {
+    public ObjectExtractor withDateMethod(String dateMethodName) throws NoSuchMethodException {
         this.dateMethodName = dateMethodName;
         this.dateValueColumn = StreamAggregatorUtils.methodToColumn(dateMethodName);
         this.dateMethod = this.clazz.getDeclaredMethod(dateMethodName);
@@ -327,7 +328,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         return this;
     }
 
-    public ObjectExtractor withUniqueIdMethod(final String uniqueIdMethodName)
+    public ObjectExtractor withUniqueIdMethod(String uniqueIdMethodName)
             throws NoSuchMethodException {
         this.uniqueIdMethodName = uniqueIdMethodName;
 
@@ -356,7 +357,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
      * @return
      * @throws UnsupportedCalculationException
      */
-    public ObjectExtractor withSummaryMethods(final List<String> summaryMethodName)
+    public ObjectExtractor withSummaryMethods(List<String> summaryMethodName)
             throws UnsupportedCalculationException {
         if (summaryMethodName != null) {
         	
@@ -365,8 +366,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         	
             this.aggregatorType = AggregatorType.SUM;
 
-            if (this.sumValueMap == null)
-			{
+            if (this.sumValueMap == null) {
 				this.sumValueMap = new HashMap<>();
 			}
 
@@ -382,11 +382,10 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         return this;
     }
 
-    public ObjectExtractor withSummaryConfig(final SummaryConfiguration config) {
+    public ObjectExtractor withSummaryConfig(SummaryConfiguration config) {
         this.summaryConfig = config;
 
-        if (this.sumValueMap == null)
-		{
+        if (this.sumValueMap == null) {
 			this.sumValueMap = new HashMap<>();
 		}
 

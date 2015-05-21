@@ -55,12 +55,12 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
     private JsonDataExtractor() {
     }
 
-    public JsonDataExtractor(final List<String> labelAttributes) {
+    public JsonDataExtractor(List<String> labelAttributes) {
         this.labelAttributes = labelAttributes;
         this.labelName = LabelSet.fromStringKeys(labelAttributes).getName();
     }
 
-    public JsonDataExtractor(final List<String> labelAttributes, final JsonSerializer serialiser) {
+    public JsonDataExtractor(List<String> labelAttributes, JsonSerializer serialiser) {
         this(labelAttributes);
         this.serialiser = serialiser;
     }
@@ -69,21 +69,20 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * {@inheritDoc}
      */
     @Override
-    public List<AggregateData> getData(final InputEvent event) throws SerializationException {
+    public List<AggregateData> getData(InputEvent event) throws SerializationException {
         try {
             List<AggregateData> aggregateData = new ArrayList<>();
             Date dateValue = null;
             JsonNode jsonContent = null;
             String dateString, summary = null;
-            this.sumUpdates = new HashMap<>();
+            sumUpdates = new HashMap<>();
 
-            List<String> items = (List<String>) this.serialiser.toClass(event);
+            List<String> items = (List<String>) serialiser.toClass(event);
 
             // log a warning if we didn't get anything back from the serialiser
             // - this could be OK, but probably isn't
-            if (items == null || items.size() == 0)
-			{
-				this.LOG.warn(String.format(
+            if (items == null || items.size() == 0) {
+				LOG.warn(String.format(
                         "Failed to deserialise any content for Record (Partition Key %s, Sequence %s",
                         event.getPartitionKey(), event.getSequenceNumber()));
 			}
@@ -110,35 +109,34 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
                             break;
                         default:
                             uniqueId = StreamAggregatorUtils.readValueAsString(jsonContent,
-                                    this.uniqueIdAttribute);
+                                    uniqueIdAttribute);
                             break;
                     }
                 }
 
                 // get the date value from the line
-                if (this.dateValueAttribute != null) {
+                if (dateValueAttribute != null) {
                     dateString = StreamAggregatorUtils.readValueAsString(jsonContent,
-                            this.dateValueAttribute);
+                            dateValueAttribute);
 
                     // bail on no date returned
-                    if (dateString == null || dateString.equals(""))
-					{
+                    if (dateString == null || dateString.equals("")) {
 						throw new SerializationException(String.format(
                                 "Unable to read date value attribute %s from JSON Content %s",
-                                this.dateValueAttribute, item));
+                                dateValueAttribute, item));
 					}
 
                     // turn date as long or string into Date
                     if (this.dateFormat != null) {
-                        dateValue = this.dateFormatter.parse(dateString);
+                        dateValue = dateFormatter.parse(dateString);
                     } else {
                         // no formatter, so treat as epoch seconds
                         try {
                             dateValue = new Date(Long.parseLong(dateString));
                         } catch (Exception e) {
-                            this.LOG.error(String.format(
+                            LOG.error(String.format(
                                     "Unable to create Date Value element from item '%s' due to invalid format as Epoch Seconds",
-                                    this.dateValueAttribute));
+                                    dateValueAttribute));
                             throw new SerializationException(e);
                         }
                     }
@@ -150,18 +148,17 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
                 // get the summed values
                 if (this.aggregatorType.equals(AggregatorType.SUM)) {
                     // get the positional sum items
-                    for (String s : this.summaryConfig.getItemSet()) {
+                    for (String s : summaryConfig.getItemSet()) {
                         try {
                             summary = StreamAggregatorUtils.readValueAsString(jsonContent, s);
 
                             // if a summary is not found in the data element,
                             // then we simply continue without it
-                            if (summary != null)
-							{
-								this.sumUpdates.put(s, Double.parseDouble(summary));
+                            if (summary != null) {
+								sumUpdates.put(s, Double.parseDouble(summary));
 							}
                         } catch (NumberFormatException nfe) {
-                            this.LOG.error(String.format(
+                            LOG.error(String.format(
                                     "Unable to deserialise Summary '%s' due to NumberFormatException",
                                     s));
                             throw new SerializationException(nfe);
@@ -169,7 +166,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
                     }
                 }
 
-                aggregateData.add(new AggregateData(uniqueId, labels, dateValue, this.sumUpdates));
+                aggregateData.add(new AggregateData(uniqueId, labels, dateValue, sumUpdates));
             }
 
             return aggregateData;
@@ -179,7 +176,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
     }
 
     /** Builder method to add the attribute which is the event unique id */
-    public JsonDataExtractor withUniqueIdAttribute(final String uniqueIdAttribute) {
+    public JsonDataExtractor withUniqueIdAttribute(String uniqueIdAttribute) {
         this.uniqueIdAttribute = uniqueIdAttribute;
 
         return this;
@@ -193,9 +190,8 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      *        item.
      * @return
      */
-    public JsonDataExtractor withDateValueAttribute(final String dateValueAttribute) {
-        if (dateValueAttribute != null)
-		{
+    public JsonDataExtractor withDateValueAttribute(String dateValueAttribute) {
+        if (dateValueAttribute != null) {
 			this.dateValueAttribute = dateValueAttribute;
 		}
         return this;
@@ -209,7 +205,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * @param dateFormat Date Format in {@link java.text.SimpleDateFormat} form.
      * @return
      */
-    public JsonDataExtractor withDateFormat(final String dateFormat) {
+    public JsonDataExtractor withDateFormat(String dateFormat) {
         if (dateFormat != null && !dateFormat.equals("")) {
             this.dateFormat = dateFormat;
             this.dateFormatter = new SimpleDateFormat(dateFormat);
@@ -217,7 +213,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
         return this;
     }
 
-    public JsonDataExtractor withSerialiser(final JsonSerializer serialiser) {
+    public JsonDataExtractor withSerialiser(JsonSerializer serialiser) {
         this.serialiser = serialiser;
         return this;
     }
@@ -231,7 +227,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * @return
      * @throws UnsupportedCalculationException
      */
-    public JsonDataExtractor withSummaryAttributes(final List<String> summaryAttributes)
+    public JsonDataExtractor withSummaryAttributes(List<String> summaryAttributes)
             throws UnsupportedCalculationException {
         if (summaryAttributes != null) {
             this.aggregatorType = AggregatorType.SUM;
@@ -250,7 +246,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      *        to be subject to data extraction.
      * @return
      */
-    public JsonDataExtractor withRegexFilter(final String filterRegex) {
+    public JsonDataExtractor withRegexFilter(String filterRegex) {
         if (filterRegex != null) {
             this.serialiser.withFilterRegex(filterRegex);
         }
@@ -263,7 +259,7 @@ public class JsonDataExtractor extends AbstractDataExtractor implements IDataExt
      * @param lineTerminator The characters used for delimiting lines of text
      * @return
      */
-    public JsonDataExtractor withItemTerminator(final String lineTerminator) {
+    public JsonDataExtractor withItemTerminator(String lineTerminator) {
         if (lineTerminator != null) {
             this.serialiser.withItemTerminator(lineTerminator);
         }

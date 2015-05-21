@@ -142,7 +142,7 @@ public class StreamAggregator implements IStreamAggregator {
 
     private boolean isFirstShardWorker = false;
 
-    private static final Log LOG = LogFactory.getLog(StreamAggregator.class);
+    private final Log LOG = LogFactory.getLog(StreamAggregator.class);
 
     private Region region = null;
 
@@ -177,7 +177,7 @@ public class StreamAggregator implements IStreamAggregator {
      * 
      * @param template
      */
-    public StreamAggregator(final StreamAggregator template) throws Exception {
+    public StreamAggregator(StreamAggregator template) throws Exception {
         this.streamName = template.streamName;
         this.applicationName = template.applicationName;
         this.namespace = template.namespace;
@@ -196,8 +196,8 @@ public class StreamAggregator implements IStreamAggregator {
         this.withTagAttrib(template.getTagAttrib());
     }
 
-    public StreamAggregator(final String streamName, final String applicationName, final String namespace,
-            final KinesisClientLibConfiguration config, final IDataExtractor dataExtractor) {
+    public StreamAggregator(String streamName, String applicationName, String namespace,
+            KinesisClientLibConfiguration config, IDataExtractor dataExtractor) {
         this.streamName = streamName;
         this.applicationName = applicationName;
         this.namespace = namespace;
@@ -207,57 +207,55 @@ public class StreamAggregator implements IStreamAggregator {
 
     @Override
 	public void checkpoint() throws Exception {
-        this.cache.flush();
-        this.lowSeq = null;
+        cache.flush();
+        lowSeq = null;
 
         // update the worker inventory showing progress to the last sequence
         // value
-        this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
+        inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
                 this.lowSeq, this.highSeq.toString(), System.currentTimeMillis(),
                 InventoryModel.STATE.RUNNING);
 
         // warn and reset if there were any ignored records
-        if (this.ignoredRecordsBelowHWM > 0) {
+        if (ignoredRecordsBelowHWM > 0) {
             logWarn(String.format(
                     "Processed %s records which were ignored due to being below the current processing HWM",
-                    this.ignoredRecordsBelowHWM));
-            this.ignoredRecordsBelowHWM = 0;
+                    ignoredRecordsBelowHWM));
+            ignoredRecordsBelowHWM = 0;
         }
 
-        this.LOG.debug("Aggregator Checkpoint for Shard " + this.shardId + " Complete");
+        LOG.debug("Aggregator Checkpoint for Shard " + this.shardId + " Complete");
     }
 
     /*
      * builder methods
      */
-    public StreamAggregator withStorageCapacity(final Long readCapacity, final Long writeCapacity) {
-        if (readCapacity != null)
-		{
+    public StreamAggregator withStorageCapacity(Long readCapacity, Long writeCapacity) {
+        if (readCapacity != null) {
 			this.readCapacity = readCapacity;
 		}
-        if (writeCapacity != null)
-		{
+        if (writeCapacity != null) {
 			this.writeCapacity = writeCapacity;
 		}
 
         return this;
     }
 
-    private void logInfo(final String message) {
-        this.LOG.info("[" + this.shardId + "] " + message);
+    private void logInfo(String message) {
+        LOG.info("[" + this.shardId + "] " + message);
     }
 
-    private void logWarn(final String message) {
-        this.LOG.warn("[" + this.shardId + "] " + message);
+    private void logWarn(String message) {
+        LOG.warn("[" + this.shardId + "] " + message);
     }
 
-    private void logWarn(final String message, final Exception e) {
-        this.LOG.warn("[" + this.shardId + "] " + message);
-        this.LOG.error(e);
+    private void logWarn(String message, Exception e) {
+        LOG.warn("[" + this.shardId + "] " + message);
+        LOG.error(e);
     }
 
     @Override
-	public void initialize(final String shardId) throws Exception {
+	public void initialize(String shardId) throws Exception {
         // Set System properties to allow entity expansion of unlimited items in
         // response documents from AWS API
         //
@@ -273,8 +271,8 @@ public class StreamAggregator implements IStreamAggregator {
         AmazonKinesisClient kinesisClient = new AmazonKinesisClient(
                 this.config.getKinesisCredentialsProvider());
         if (this.config.getRegionName() != null) {
-            this.region = Region.getRegion(Regions.fromName(this.config.getRegionName()));
-            kinesisClient.setRegion(this.region);
+            region = Region.getRegion(Regions.fromName(this.config.getRegionName()));
+            kinesisClient.setRegion(region);
         }
 
         try {
@@ -294,8 +292,7 @@ public class StreamAggregator implements IStreamAggregator {
             this.aggregatorType = AggregatorType.COUNT;
         }
 
-        if (this.dataExtractor == null)
-		{
+        if (this.dataExtractor == null) {
 			throw new InvalidConfigurationException(
                     "Unable to create Aggregator Instance without a configured IDataStore");
 		}
@@ -308,22 +305,20 @@ public class StreamAggregator implements IStreamAggregator {
         ClientConfiguration clientConfig = new ClientConfiguration().withSocketTimeout(60000);
         this.dynamoClient = new AmazonDynamoDBAsyncClient(
                 this.config.getDynamoDBCredentialsProvider(), clientConfig);
-        if (this.region != null)
-		{
-			this.dynamoClient.setRegion(this.region);
+        if (region != null) {
+			this.dynamoClient.setRegion(region);
 		}
 
         this.kinesisClient = new AmazonKinesisClient(this.config.getKinesisCredentialsProvider());
-        if (this.region != null)
-		{
-			this.kinesisClient.setRegion(this.region);
+        if (region != null) {
+			this.kinesisClient.setRegion(region);
 		}
 
-        this.inventory = new InventoryModel(this.dynamoClient);
+        inventory = new InventoryModel(this.dynamoClient);
 
         // get the latest sequence number checkpointed for this named aggregator
         // on this shard
-        InventoryStatus lastUpdate = this.inventory.getLastUpdate(this.streamName, this.applicationName,
+        InventoryStatus lastUpdate = inventory.getLastUpdate(this.streamName, this.applicationName,
                 this.namespace, this.shardId);
         if (lastUpdate != null && lastUpdate.getHighSeq() != null) {
             // set the current high sequence to the last high sequence
@@ -331,24 +326,23 @@ public class StreamAggregator implements IStreamAggregator {
         }
 
         // log that we are now starting up
-        this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId, null,
+        inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId, null,
                 null, System.currentTimeMillis(), InventoryModel.STATE.STARTING);
 
         // set the table name we will use for aggregated values
         if (this.tableName == null) {
-            this.tableName = StreamAggregatorUtils.getTableName(this.config.getApplicationName(),
+            this.tableName = StreamAggregatorUtils.getTableName(config.getApplicationName(),
                     this.getNamespace());
         }
 
-        if (this.environment != null && !this.environment.equals(""))
-		{
+        if (this.environment != null && !this.environment.equals("")) {
 			this.tableName = String.format("%s.%s", this.environment, this.tableName);
 		}
 
         // resolve the basic data being aggregated
-        String labelColumn = StreamAggregatorUtils.methodToColumn(this.dataExtractor.getAggregateLabelName());
-        String dateColumn = this.dataExtractor.getDateValueName() == null ? DEFAULT_DATE_VALUE
-                : this.dataExtractor.getDateValueName();
+        String labelColumn = StreamAggregatorUtils.methodToColumn(dataExtractor.getAggregateLabelName());
+        String dateColumn = dataExtractor.getDateValueName() == null ? DEFAULT_DATE_VALUE
+                : dataExtractor.getDateValueName();
 
         // configure the default dynamo data store
         if (this.dataStore == null) {
@@ -356,14 +350,14 @@ public class StreamAggregator implements IStreamAggregator {
                     this.aggregatorType, this.streamName, this.tableName, labelColumn, dateColumn).withStorageCapacity(
                     this.readCapacity, this.writeCapacity)
                     .withTagAttrib(this.tagAttrib);
-            this.dataStore.setRegion(this.region);
+            this.dataStore.setRegion(region);
             
             LOG.debug("Init data store, using tag name: " + this.tagAttrib);
         }
         this.dataStore.initialise();
         
         // configure the cache so it can do its work
-        this.cache = new AggregateCache(this.shardId).withCredentials(
+        cache = new AggregateCache(this.shardId).withCredentials(
                 this.config.getKinesisCredentialsProvider()).withAggregateType(this.aggregatorType).withTableName(
                 this.tableName).withLabelColumn(labelColumn).withDateColumn(dateColumn).withDataStore(
                 this.dataStore)
@@ -376,17 +370,16 @@ public class StreamAggregator implements IStreamAggregator {
         }
 
         if (this.metricsEmitter != null) {
-            if (this.config.getRegionName() != null)
-			{
-				this.metricsEmitter.setRegion(this.region);
+            if (this.config.getRegionName() != null) {
+				this.metricsEmitter.setRegion(region);
 			}
         }
         // add the metrics publisher to the cache if we are bound to the lowest
         // shard
         if (this.metricsEmitter != null) {
-            this.cache.withMetricsEmitter(this.metricsEmitter);
+            cache.withMetricsEmitter(this.metricsEmitter);
         }
-        this.cache.initialise();
+        cache.initialise();
         
 
         // set the user agent
@@ -399,20 +392,19 @@ public class StreamAggregator implements IStreamAggregator {
 
         // log startup state
         StringBuffer sb = new StringBuffer();
-        for (TimeHorizon t : this.timeHorizons) {
+        for (TimeHorizon t : timeHorizons) {
             sb.append(String.format("%s,", t.name()));
         }
         sb.deleteCharAt(sb.length() - 1);
 
         logInfo(String.format(
                 "Amazon Kinesis Stream Aggregator Online\nStream: %s\nApplication: %s\nNamespace: %s\nWorker: %s\nGranularity: %s\nContent Extracted With: %s",
-                this.streamName, this.applicationName, this.namespace, this.config.getWorkerIdentifier(),
-                sb.toString(), this.dataExtractor.getClass().getName()));
-        if (this.highSeq != null)
-		{
+                streamName, applicationName, this.namespace, this.config.getWorkerIdentifier(),
+                sb.toString(), dataExtractor.getClass().getName()));
+        if (this.highSeq != null) {
 			logInfo(String.format("Processing Data from Seq: %s", this.highSeq));
 		}
-        this.online = true;
+        online = true;
     }
 
     private void validateConfig() throws Exception {
@@ -437,9 +429,8 @@ public class StreamAggregator implements IStreamAggregator {
      * @param horizon TimeHorizon value to be used for aggregated data
      * @return
      */
-    public StreamAggregator withTimeHorizon(final TimeHorizon horizon) {
-        if (this.timeHorizons == null)
-		{
+    public StreamAggregator withTimeHorizon(TimeHorizon horizon) {
+        if (this.timeHorizons == null) {
 			this.timeHorizons = new ArrayList<>();
 		}
 
@@ -456,7 +447,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param horizon TimeHorizon value to be used for aggregated data
      * @return
      */
-    public StreamAggregator withTimeHorizon(final List<TimeHorizon> horizons) {
+    public StreamAggregator withTimeHorizon(List<TimeHorizon> horizons) {
         if (this.timeHorizons == null) {
             this.timeHorizons = horizons;
         } else {
@@ -474,9 +465,8 @@ public class StreamAggregator implements IStreamAggregator {
      * @param horizon TimeHorizon value to be used for aggregated data
      * @return
      */
-    public StreamAggregator withTimeHorizon(final TimeHorizon... horizons) {
-        if (this.timeHorizons == null)
-		{
+    public StreamAggregator withTimeHorizon(TimeHorizon... horizons) {
+        if (this.timeHorizons == null) {
 			this.timeHorizons = new ArrayList<>();
 		}
 
@@ -493,7 +483,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param tableName The table name to use for data storage
      * @return
      */
-    public StreamAggregator withTableName(final String tableName) {
+    public StreamAggregator withTableName(String tableName) {
         this.tableName = tableName;
         return this;
     }
@@ -506,7 +496,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param t The Aggregator Type to use
      * @return
      */
-    public StreamAggregator withAggregatorType(final AggregatorType t) {
+    public StreamAggregator withAggregatorType(AggregatorType t) {
         if (t != null) {
             this.aggregatorType = t;
         }
@@ -523,7 +513,7 @@ public class StreamAggregator implements IStreamAggregator {
      *        on the stream and cannot be deserialised
      * @return
      */
-    public StreamAggregator withRaiseExceptionOnDataExtractionErrors(final boolean bool) {
+    public StreamAggregator withRaiseExceptionOnDataExtractionErrors(boolean bool) {
         this.raiseExceptionOnDataExtractionErrors = bool;
         return this;
     }
@@ -545,7 +535,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param dataStore
      * @return
      */
-    public StreamAggregator withDataStore(final IDataStore dataStore) {
+    public StreamAggregator withDataStore(IDataStore dataStore) {
         if (dataStore != null) {
             this.dataStore = dataStore;
         }
@@ -558,7 +548,7 @@ public class StreamAggregator implements IStreamAggregator {
      * @param metricsEmitter
      * @return
      */
-    public StreamAggregator withMetricsEmitter(final IMetricsEmitter metricsEmitter) {
+    public StreamAggregator withMetricsEmitter(IMetricsEmitter metricsEmitter) {
         if (metricsEmitter != null) {
             this.metricsEmitter = metricsEmitter;
         }
@@ -571,19 +561,19 @@ public class StreamAggregator implements IStreamAggregator {
      * @param idempotencyCheck
      * @return
      */
-    public StreamAggregator withIdempotencyCheck(final IIdempotencyCheck idempotencyCheck) {
+    public StreamAggregator withIdempotencyCheck(IIdempotencyCheck idempotencyCheck) {
         if (idempotencyCheck != null) {
             this.idempotencyCheck = idempotencyCheck;
         }
         return this;
     }
 
-    public StreamAggregator withEnvironment(final EnvironmentType environment) {
+    public StreamAggregator withEnvironment(EnvironmentType environment) {
         this.environment = environment.name();
         return this;
     }
 
-    public StreamAggregator withEnvironment(final String environment) {
+    public StreamAggregator withEnvironment(String environment) {
         this.environment = environment;
         return this;
     }
@@ -644,19 +634,17 @@ public class StreamAggregator implements IStreamAggregator {
     }
 
     @Override
-	public void shutdown(final boolean flushState) throws Exception {
+	public void shutdown(boolean flushState) throws Exception {
         shutdown(flushState, null);
     }
 
-    public void shutdown(final boolean flushState, final InventoryModel.STATE withState) throws Exception {
-        if (flushState)
-		{
+    public void shutdown(boolean flushState, InventoryModel.STATE withState) throws Exception {
+        if (flushState) {
 			checkpoint();
 		}
 
-        if (this.inventory != null)
-		{
-			this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
+        if (inventory != null) {
+			inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
                     null, null, System.currentTimeMillis(),
                     withState == null ? InventoryModel.STATE.STOPPED : withState);
 		}
@@ -667,7 +655,7 @@ public class StreamAggregator implements IStreamAggregator {
      * {@inheritDoc}
      */
     @Override
-	public void aggregate(final List<Record> records) throws Exception {
+	public void aggregate(List<Record> records) throws Exception {
         List<InputEvent> events = new ArrayList<>();
 
         for (Record r : records) {
@@ -681,12 +669,12 @@ public class StreamAggregator implements IStreamAggregator {
      * {@inheritDoc}
      */
     @Override
-	public void aggregateEvents(final List<InputEvent> events) throws Exception {
-        this.start = System.currentTimeMillis();
+	public void aggregateEvents(List<InputEvent> events) throws Exception {
+        start = System.currentTimeMillis();
         int aggregatedEventCount = 0;
         int aggregatedElementCount = 0;
 
-        if (!this.online) {
+        if (!online) {
             throw new Exception("Aggregator Not Initialised");
         }
 
@@ -704,25 +692,24 @@ public class StreamAggregator implements IStreamAggregator {
                     // ignore any records which are going backward with regard
                     // to
                     // the current hwm
-                    if (this.highSeq != null && this.highSeq.compareTo(thisSequence) != -1) {
-                        this.ignoredRecordsBelowHWM++;
+                    if (highSeq != null && highSeq.compareTo(thisSequence) != -1) {
+                        ignoredRecordsBelowHWM++;
                         continue;
                     }
                 }
 
                 // set the low sequence if this is the first record received
                 // after a flush
-                if (this.lowSeq == null)
-				{
-					this.lowSeq = event.getSequenceNumber();
+                if (lowSeq == null) {
+					lowSeq = event.getSequenceNumber();
 				}
 
                 // high sequence is always the latest value
-                this.highSeq = new BigInteger(event.getSequenceNumber());
+                highSeq = new BigInteger(event.getSequenceNumber());
 
                 // extract the data from the input event
                 try {
-                    extractedItems = this.dataExtractor.getData(event);
+                    extractedItems = dataExtractor.getData(event);
                 } catch (SerializationException se) {
                     // customer may have elected to suppress serialisation
                     // errors if the stream is expected have heterogenous data
@@ -763,13 +750,13 @@ public class StreamAggregator implements IStreamAggregator {
 
                         // generate the local updates, one per time horizon that
                         // is requested
-                        for (TimeHorizon h : this.timeHorizons) {
+                        for (TimeHorizon h : timeHorizons) {
                             // atomically update the aggregate table with event
                             // count or count + summaries
-                            this.cache.update(
-                                    this.aggregatorType,
+                            cache.update(
+                                    aggregatorType,
                                     data.getLabels(),
-                                    (this.timeHorizons.size() > 1 ? h.getItemWithMultiValueFormat(eventDate) : h.getValue(eventDate)),
+                                    (timeHorizons.size() > 1 ? h.getItemWithMultiValueFormat(eventDate) : h.getValue(eventDate)),
                                     h,
                                     event.getSequenceNumber(),
                                     1,
@@ -783,14 +770,14 @@ public class StreamAggregator implements IStreamAggregator {
 
             logInfo(String.format("Aggregation Complete - %s Records and %s Elements in %s ms",
                     aggregatedEventCount, aggregatedElementCount,
-                    (System.currentTimeMillis() - this.start)));
+                    (System.currentTimeMillis() - start)));
         } catch (SerializationException se) {
             shutdown(true, InventoryModel.STATE.SERIALISATION_ERROR);
-            this.LOG.error(se);
+            LOG.error(se);
             throw se;
         } catch (Exception e) {
             shutdown(true, InventoryModel.STATE.UNKNOWN_ERROR);
-            this.LOG.error(e);
+            LOG.error(e);
             throw e;
         }
     }
@@ -804,8 +791,8 @@ public class StreamAggregator implements IStreamAggregator {
      * @param h The Time Horizon to query
      * @return
      */
-    public List<Map<String, AttributeValue>> queryValue(final String label, final Date dateValue,
-            final ComparisonOperator comp) throws Exception {
+    public List<Map<String, AttributeValue>> queryValue(String label, Date dateValue,
+            ComparisonOperator comp) throws Exception {
         if (!(this.dataStore instanceof DynamoDataStore)) {
             throw new Exception("Unable to Query by Date unless Data Store is Dynamo DB");
         }
@@ -828,8 +815,8 @@ public class StreamAggregator implements IStreamAggregator {
      * @return A list of data stored in Dynamo DB for the time range
      * @throws Exception
      */
-    public List<Map<String, AttributeValue>> queryByDate(final Date dateValue, final TimeHorizon h,
-            final ComparisonOperator comp, final int threads) throws Exception {
+    public List<Map<String, AttributeValue>> queryByDate(Date dateValue, TimeHorizon h,
+            ComparisonOperator comp, int threads) throws Exception {
         if (!(this.dataStore instanceof DynamoDataStore)) {
             throw new Exception("Unable to Query by Date unless Data Store is Dynamo DB");
         }
@@ -859,7 +846,7 @@ public class StreamAggregator implements IStreamAggregator {
         return items;
     }
 
-    public List<TableKeyStructure> parallelQueryKeys(final QueryKeyScope scope, final int threads)
+    public List<TableKeyStructure> parallelQueryKeys(QueryKeyScope scope, int threads)
             throws Exception {
         if (!(this.dataStore instanceof DynamoDataStore)) {
             throw new Exception("Unable to Query Keys unless Data Store is Dynamo DB");

@@ -32,7 +32,7 @@ public class AggregateData {
     
     private String tagValue;
 
-    public AggregateData(final String uniqueId, final LabelSet labels, final Date date, final Map<String, Double> summaries) {
+    public AggregateData(String uniqueId, LabelSet labels, Date date, Map<String, Double> summaries) {
         this.uniqueId = uniqueId;
         this.labels = labels;
         this.date = date;

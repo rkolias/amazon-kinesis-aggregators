@@ -3,14 +3,14 @@
  *
  * Copyright 2014, Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
- * Licensed under the Amazon Software License (the "License"). You may not use
- * this file except in compliance with the License. A copy of the License is
- * located at
+ * Licensed under the Amazon Software License (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
  *
  * http://aws.amazon.com/asl/
  *
- * or in the "license" file accompanying this file. This file is distributed on
- * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
@@ -28,11 +28,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibC
 import com.amazonaws.services.kinesis.io.IDataExtractor;
 import com.amazonaws.services.kinesis.io.ObjectExtractor;
 
-
-public class ObjectAggregatorFactory
-{
-	private ObjectAggregatorFactory()
-	{
+public class ObjectAggregatorFactory {
+    private ObjectAggregatorFactory() {
 	}
 	
 	/**
@@ -49,33 +46,26 @@ public class ObjectAggregatorFactory
 	 * @return A Stream Aggregator which can process object serialised data
 	 * @throws Exception
 	 */
-	public static final StreamAggregator newInstance(final String streamName, final String appName,
-		final KinesisClientLibConfiguration config, final Class clazz) throws Exception
-	{
+    public static final StreamAggregator newInstance(String streamName, String appName,
+            KinesisClientLibConfiguration config, Class clazz) throws Exception {
 		AnnotationProcessor p = new AnnotationProcessor(clazz);
-		ObjectExtractor dataExtractor = new ObjectExtractor(p.getLabelMethodNames(), clazz).withDateMethod(p
-			.getDateMethodName());
+        ObjectExtractor dataExtractor = new ObjectExtractor(p.getLabelMethodNames(), clazz).withDateMethod(p.getDateMethodName());
 		
 		dataExtractor.withSummaryConfig(p.getSummaryConfig());
-		// dataExtractor.withSummaryMethods(new
-		// ArrayList<>(p.getSummaryMethods().keySet()));
+        //dataExtractor.withSummaryMethods(new ArrayList<>(p.getSummaryMethods().keySet()));
 		
 		StreamAggregator agg = new StreamAggregator(streamName, appName, p.getNamespace(), config,
-			dataExtractor).withTimeHorizon(p.getTimeHorizon()).withAggregatorType(p.getType())
-			.withRaiseExceptionOnDataExtractionErrors(p.shouldFailOnDataExtractionErrors());
+                dataExtractor).withTimeHorizon(p.getTimeHorizon()).withAggregatorType(p.getType()).withRaiseExceptionOnDataExtractionErrors(
+                p.shouldFailOnDataExtractionErrors());
 		
 		// configure metrics service on the aggregator if it's been
 		// configured
 		if (p.shouldEmitMetrics()
-			|| (p.getMetricsEmitter() != null && !p.getMetricsEmitter()
-				.equals(CloudWatchMetricsEmitter.class)))
-		{
-			if (p.getMetricsEmitter() != null)
-			{
+                || (p.getMetricsEmitter() != null && !p.getMetricsEmitter().equals(
+                        CloudWatchMetricsEmitter.class))) {
+            if (p.getMetricsEmitter() != null) {
 				agg.withMetricsEmitter(p.getMetricsEmitter().newInstance());
-			}
-			else
-			{
+            } else {
 				agg.withCloudWatchMetrics();
 			}
 		}
@@ -85,8 +75,7 @@ public class ObjectAggregatorFactory
 		// are configured via their environment or have self defined
 		// configuration models: only no args public constructors can be
 		// called
-		if (p.getDataStore() != null && !p.getDataStore().equals(DynamoDataStore.class))
-		{
+		if (p.getDataStore() != null && !p.getDataStore().equals(DynamoDataStore.class)) {
 			agg.withDataStore(p.getDataStore().newInstance());
 		}
 		
@@ -112,22 +101,21 @@ public class ObjectAggregatorFactory
 	 * @param labelMethods The method on the base class to use to obtain the
 	 *            label for aggregation.
 	 * @param dateMethod The method on the object which should be used to
-	 *            establish the time. If NULL then the client receive time will
-	 *            be used.
+     *        establish the time. If NULL then the client receive time will be
+     *        used.
 	 * @param summaryMethods List of summary method names or expressions to be
-	 *            used when the AggregatorType is SUM, as secondary aggregated
-	 *            data points
+     *        used when the AggregatorType is SUM, as secondary aggregated data
+     *        points
 	 * @return A Stream Aggregator which can process object serialised data
 	 * @throws Exception
 	 */
-	public static final StreamAggregator newInstance(final String streamName, final String appName,
-		final KinesisClientLibConfiguration config, final String namespace, final TimeHorizon timeHorizon,
-		final AggregatorType aggregatorType, final Class clazz, final List<String> labelMethods,
-		final String dateMethod, final List<String> summaryMethods) throws Exception
-	{
-		return newInstance(streamName, appName, config, namespace, Arrays.asList(new TimeHorizon[] {
-			timeHorizon
-		}), aggregatorType, clazz, labelMethods, dateMethod, summaryMethods);
+    public static final StreamAggregator newInstance(String streamName, String appName,
+            KinesisClientLibConfiguration config, String namespace, TimeHorizon timeHorizon,
+            AggregatorType aggregatorType, Class clazz, List<String> labelMethods,
+            String dateMethod, List<String> summaryMethods) throws Exception {
+		return newInstance(streamName, appName, config, namespace, 
+                Arrays.asList(new TimeHorizon[] { timeHorizon }), aggregatorType, clazz,
+		    labelMethods, dateMethod, summaryMethods);
 	}
 	
 	/**
@@ -150,19 +138,19 @@ public class ObjectAggregatorFactory
 	 * @param labelMethods The methods on the base class to use to obtain the
 	 *            label for aggregation.
 	 * @param dateMethod The method on the object which should be used to
-	 *            establish the time. If NULL then the client receive time will
-	 *            be used.
+     *        establish the time. If NULL then the client receive time will be
+     *        used.
 	 * @param summaryMethods List of summary method names or expressions to be
-	 *            used when the AggregatorType is SUM, as secondary aggregated
-	 *            data points.
+     *        used when the AggregatorType is SUM, as secondary aggregated data
+     *        points.
 	 * @return A Stream Aggregator which can process object serialised data.
 	 * @return
 	 * @throws Exception
 	 */
-	public static final StreamAggregator newInstance(final String streamName, final String appName,
-		final KinesisClientLibConfiguration config, final String namespace,
-		final List<TimeHorizon> timeHorizons, final AggregatorType aggregatorType, final Class clazz,
-		final List<String> labelMethods, final String dateMethod, final List<String> summaryMethods)
+	public static final StreamAggregator newInstance(String streamName, String appName,
+		KinesisClientLibConfiguration config, String namespace,
+		List<TimeHorizon> timeHorizons, AggregatorType aggregatorType, Class clazz,
+		List<String> labelMethods, String dateMethod, List<String> summaryMethods)
 		throws Exception
 	{
 		

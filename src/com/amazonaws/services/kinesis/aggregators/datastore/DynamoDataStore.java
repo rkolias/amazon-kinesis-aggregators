@@ -114,9 +114,9 @@ public class DynamoDataStore implements IDataStore {
 
     private DynamoQueryEngine queryEngine;
 
-    public DynamoDataStore(final AmazonDynamoDB dynamoClient, final AmazonKinesisClient kinesisClient,
-            final AggregatorType aggregatorType, final String streamName, final String tableName,
-            final String labelAttribute, final String dateAttribute) {
+    public DynamoDataStore(AmazonDynamoDB dynamoClient, AmazonKinesisClient kinesisClient,
+            AggregatorType aggregatorType, String streamName, String tableName,
+            String labelAttribute, String dateAttribute) {
         this.dynamoClient = dynamoClient;
         this.kinesisClient = kinesisClient;
         this.aggregatorType = aggregatorType;
@@ -126,8 +126,8 @@ public class DynamoDataStore implements IDataStore {
         this.dateAttribute = dateAttribute;
     }
 
-    public DynamoDataStore(final AWSCredentialsProvider credentials, final AggregatorType aggregatorType,
-            final String streamName, final String tableName, final String labelAttribute, final String dateAttribute) {
+    public DynamoDataStore(AWSCredentialsProvider credentials, AggregatorType aggregatorType,
+            String streamName, String tableName, String labelAttribute, String dateAttribute) {
         this(new AmazonDynamoDBAsyncClient(credentials), new AmazonKinesisClient(credentials),
                 aggregatorType, streamName, tableName, labelAttribute, dateAttribute);
     }
@@ -153,8 +153,7 @@ public class DynamoDataStore implements IDataStore {
 
     @Override
     public Map<UpdateKey, Map<String, AggregateAttributeModification>> write(
-            final Map<UpdateKey, UpdateValue> data) throws Exception {
-    	
+            Map<UpdateKey, UpdateValue> data) throws Exception {
         UpdateItemRequest req = null;
         UpdateItemResult result;
         Map<String, AggregateAttributeModification> updatedValues;
@@ -163,7 +162,7 @@ public class DynamoDataStore implements IDataStore {
         int conditionals = 0;
 
         if (data != null && data.keySet().size() > 0) {
-            DynamoDataStore.LOG.debug(String.format("Flushing %s Cache Updates", data.size()));
+            LOG.debug(String.format("Flushing %s Cache Updates", data.size()));
 
             // go through all pending updates and write down increments to event
             // counts and SUM operations first, then do other types of
@@ -184,7 +183,7 @@ public class DynamoDataStore implements IDataStore {
                 updates.put(
                         SCATTER_PREFIX_ATTRIBUTE,
                         new AttributeValueUpdate().withAction(AttributeAction.PUT).withValue(
-                                new AttributeValue().withN("" + this.r.nextInt(SCATTER_WIDTH))));
+                                new AttributeValue().withN("" + r.nextInt(SCATTER_WIDTH))));
 
                 // add the event count update to the list of updates to be made
                 updates.put(
@@ -212,8 +211,7 @@ public class DynamoDataStore implements IDataStore {
                 // add any optional additional tag fields; this allows data storage (and later seeking) based on
                 // an alternate/additional key; this allows for hierarchy (ie searching by company,
                 // or organization within a company), instead of a single fixed key
-                if (this.tagAttrib != null)
-                {
+                if (this.tagAttrib != null) {
                 	String tagValue = updateKey.getTagValue();
                 	
                 	LOG.debug("adding tag attrib value: " + this.tagAttrib + "; value: " + tagValue);
@@ -252,10 +250,10 @@ public class DynamoDataStore implements IDataStore {
                 // do the update to all sum and count attributes as well
                 // as the last write sequence and time - this gives us a key to
                 // write other calculations onto
-                req = new UpdateItemRequest().withTableName(this.tableName).withKey(
+                req = new UpdateItemRequest().withTableName(tableName).withKey(
                         StreamAggregatorUtils.getTableKey(updateKey)).withAttributeUpdates(updates).withReturnValues(
                         ReturnValue.UPDATED_NEW);
-                result = DynamoUtils.updateWithRetries(this.dynamoClient, req);
+                result = DynamoUtils.updateWithRetries(dynamoClient, req);
 
                 // add the event count to the modifications made
                 updatedValues.put(
@@ -283,9 +281,9 @@ public class DynamoDataStore implements IDataStore {
 
                 // log the structure of the table once, so the customer can
                 // retrieve it directly
-                if (!this.reportedStructure) {
-                    DynamoDataStore.LOG.info(getTableStructure());
-                    this.reportedStructure = true;
+                if (!reportedStructure) {
+                    LOG.info(getTableStructure());
+                    reportedStructure = true;
                 }
             }
 
@@ -309,7 +307,7 @@ public class DynamoDataStore implements IDataStore {
                         if (update.getCalculationApplied().getSummaryUpdateMethod().equals(
                                 DynamoSummaryUpdateMethod.CONDITIONAL)) {
                             conditionals++;
-                            result = updateConditionalValue(this.dynamoClient, this.tableName, key2,
+                            result = updateConditionalValue(dynamoClient, tableName, key2,
                                     attribute, update);
 
                             // if the update was made by this conditional
@@ -335,7 +333,7 @@ public class DynamoDataStore implements IDataStore {
                     updatedData.put(key2, updatedValues);
                 }
 
-                DynamoDataStore.LOG.debug(String.format("Processed %s Conditional Updates", conditionals));
+                LOG.debug(String.format("Processed %s Conditional Updates", conditionals));
             }
         }
 
@@ -441,17 +439,16 @@ public class DynamoDataStore implements IDataStore {
     protected List<String> getDictionaryEntry() throws Exception {
         // get a list of all columns in the table, with keys first
         List<String> columns = new ArrayList<>();
-        List<KeySchemaElement> keys = this.dynamoClient.describeTable(this.tableName).getTable().getKeySchema();
+        List<KeySchemaElement> keys = dynamoClient.describeTable(this.tableName).getTable().getKeySchema();
         for (KeySchemaElement key : keys) {
             columns.add(key.getAttributeName());
         }
-        ScanResult scan = this.dynamoClient.scan(new ScanRequest().withTableName(this.tableName).withSelect(
+        ScanResult scan = dynamoClient.scan(new ScanRequest().withTableName(this.tableName).withSelect(
                 Select.ALL_ATTRIBUTES).withLimit(1));
         List<Map<String, AttributeValue>> scannedItems = scan.getItems();
         for (Map<String, AttributeValue> map : scannedItems) {
             for (String s : map.keySet()) {
-                if (!columns.contains(s))
-				{
+                if (!columns.contains(s)) {
 					columns.add(s);
 				}
             }
@@ -487,7 +484,7 @@ public class DynamoDataStore implements IDataStore {
 
         // Global Secondary Index for accessing the table by date item
         gsi.add(new GlobalSecondaryIndex().withIndexName(
-                StreamAggregatorUtils.getDateDimensionIndexName(this.tableName, setDateColumn)).withKeySchema(
+                StreamAggregatorUtils.getDateDimensionIndexName(tableName, setDateColumn)).withKeySchema(
                 new KeySchemaElement().withAttributeName(SCATTER_PREFIX_ATTRIBUTE).withKeyType(
                         KeyType.HASH),
                 new KeySchemaElement().withAttributeName(setDateColumn).withKeyType(KeyType.RANGE)).withProjection(
@@ -514,7 +511,7 @@ public class DynamoDataStore implements IDataStore {
 
     @Override
 	public long refreshForceCheckpointThresholds() {
-        DynamoDataStore.LOG.info("Refreshing Provisioned Throughput settings");
+        LOG.info("Refreshing Provisioned Throughput settings");
 
         // get the current provisioned capacity
         this.writeCapacity = getProvisionedWrites();
@@ -528,7 +525,7 @@ public class DynamoDataStore implements IDataStore {
                         this.streamName);
                 return (4 * (60 * this.writeCapacity)) / currentShardCount;
             } catch (Exception e) {
-                DynamoDataStore.LOG.warn(String.format(
+                LOG.warn(String.format(
                         "Unable to get Shard Count for Stream %s. Using Overly Optimistic Throughput Settings",
                         this.streamName));
             }
@@ -537,7 +534,7 @@ public class DynamoDataStore implements IDataStore {
     }
 
     private long getProvisionedWrites() {
-        return this.dynamoClient.describeTable(this.tableName).getTable().getProvisionedThroughput().getWriteCapacityUnits();
+        return dynamoClient.describeTable(this.tableName).getTable().getProvisionedThroughput().getWriteCapacityUnits();
     }
 
     public DynamoQueryEngine queryEngine() {
@@ -549,18 +546,16 @@ public class DynamoDataStore implements IDataStore {
     }
 
     @Override
-    public void setRegion(final Region region) {
+    public void setRegion(Region region) {
         this.region = region;
     }
 
-    public DynamoDataStore withStorageCapacity(final long readCapacity, final long writeCapacity) {
-        if (readCapacity > 0l)
-		{
+    public DynamoDataStore withStorageCapacity(long readCapacity, long writeCapacity) {
+        if (readCapacity > 0l) {
 			this.readCapacity = readCapacity;
 		}
 
-        if (writeCapacity > 0l)
-		{
+        if (writeCapacity > 0l) {
 			this.writeCapacity = writeCapacity;
 		}
 
