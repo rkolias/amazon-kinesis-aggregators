@@ -82,7 +82,7 @@ public class DynamoDataStore implements IDataStore {
      */
     public static final long DEFAULT_WRITE_CAPACITY = 10L;
 
-    private static final Log LOG = LogFactory.getLog(DynamoDataStore.class);
+    private final Log LOG = LogFactory.getLog(DynamoDataStore.class);
 
     private String environment, tableName, streamName;
 
@@ -551,13 +551,11 @@ public class DynamoDataStore implements IDataStore {
     }
 
     public DynamoDataStore withStorageCapacity(long readCapacity, long writeCapacity) {
-        if (readCapacity > 0l) {
+        if (readCapacity > 0l)
 			this.readCapacity = readCapacity;
-		}
 
-        if (writeCapacity > 0l) {
+        if (writeCapacity > 0l)
 			this.writeCapacity = writeCapacity;
-		}
 
         return this;
     }

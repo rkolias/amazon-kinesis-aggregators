@@ -67,7 +67,7 @@ public class AggregateCache {
 
     private int forcedCount = 0;
 
-    private static final Log LOG = LogFactory.getLog(AggregateCache.class);
+    private final Log LOG = LogFactory.getLog(AggregateCache.class);
 
     private boolean online = false;
 
@@ -236,8 +236,7 @@ public class AggregateCache {
         String tagValue
     	) throws Exception {
         // lazy validate the configuration
-        if (!online)
-		{
+        if (!online) {
 			initialise();
 		}
 

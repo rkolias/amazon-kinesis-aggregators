@@ -93,9 +93,10 @@ public class UpdateKey {
     }
     
     /**
-     * 
-     * @param value
-     * @return
+     * Set the (optional) tag value to for they record. This allows us to add a second key, later add a 
+     * global secondary index to seek data by an aggregate key.  
+     * @param value the tag's value
+     * @return this
      */
     public UpdateKey withTagValue(String value)
     {
@@ -105,8 +106,8 @@ public class UpdateKey {
     }
     
     /**
-     * 
-     * @return
+     * Return the tag value.
+     * @return the tag value, may be null
      */
     public String getTagValue()
     {

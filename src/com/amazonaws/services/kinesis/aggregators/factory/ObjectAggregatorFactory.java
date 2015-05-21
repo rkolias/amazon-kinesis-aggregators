@@ -165,19 +165,20 @@ public class ObjectAggregatorFactory {
 	}
 	
 	/**
-	 * 
-	 * @param streamName
-	 * @param appName
-	 * @param config
-	 * @param namespace
-	 * @param timeHorizons
-	 * @param aggregatorType
-	 * @param clazz
-	 * @param labelMethods
-	 * @param dateMethod
-	 * @param summaryMethods
-	 * @param tagMethod
-	 * @return
+	 * Factory method to produce a new stream aggregator which will use Jackson to un/marshall the given
+	 * object as the source of the kinesis record.
+	 * @param streamName the stream name
+	 * @param appName the app name
+	 * @param config the kinesis client lib configuration
+	 * @param namespace the qualifying namespace
+	 * @param timeHorizons one or more time horizons with which to group data records
+	 * @param aggregatorType the aggregator type
+	 * @param clazz the java class which will be used as a kinesis record
+	 * @param labelMethods the methods to call to get the primary key label
+	 * @param dateMethod the method to call to get the date of the event
+	 * @param summaryMethods the methods to call to get summary values for a SUM type
+	 * @param tagMethod a method name on the object to use to get the tag value
+	 * @return the stream aggregator
 	 * @throws Exception
 	 */
 	public static final StreamAggregator newInstance(
@@ -187,7 +188,7 @@ public class ObjectAggregatorFactory {
 		final String namespace,
 		final List<TimeHorizon> timeHorizons, 
 		final AggregatorType aggregatorType, 
-		final Class clazz,
+		final Class<?> clazz,
 		final List<String> labelMethods, 
 		final String dateMethod, 
 		final List<String> summaryMethods,
