@@ -37,6 +37,7 @@ import com.amazonaws.services.kinesis.model.Record;
 public class AggregatorProcessor implements IRecordProcessor {
     private static final Log LOG = LogFactory.getLog(AggregatorProcessor.class);
 
+    
     private final int NUM_RETRIES = 10;
 
     private final long BACKOFF_TIME_IN_MILLIS = 100L;
@@ -69,19 +70,25 @@ public class AggregatorProcessor implements IRecordProcessor {
      */
     @Override
     public void processRecords(List<Record> records, IRecordProcessorCheckpointer checkpointer) {
-        LOG.info("Aggregating " + records.size() + " records for Kinesis Shard " + kinesisShardId);
+    	
+        LOG.info("Aggregating " + records.size() + " records for Kinesis Shard " + this.kinesisShardId);
+        
         try {
+        	
             // run data into the aggregator
-            agg.aggregate(records);
+            this.agg.aggregate(records);
 
             // checkpoint the aggregator and kcl
-            agg.checkpoint();
+            this.agg.checkpoint();
             checkpointer.checkpoint();
 
-            LOG.debug("Kinesis Checkpoint for Shard " + kinesisShardId + " Complete");
+            LOG.debug("Kinesis Checkpoint for Shard " + this.kinesisShardId + " Complete");
+            
         } catch (Exception e) {
             e.printStackTrace();
-            LOG.error(e);
+            
+            LOG.error("Failed to process records; ", e);
+            
             shutdown(checkpointer, ShutdownReason.ZOMBIE);
         }
     }
@@ -91,13 +98,13 @@ public class AggregatorProcessor implements IRecordProcessor {
      */
     @Override
     public void shutdown(IRecordProcessorCheckpointer checkpointer, ShutdownReason reason) {
-        LOG.info("Shutting down record processor for shard: " + kinesisShardId);
+        LOG.info("Shutting down record processor for shard: " + this.kinesisShardId);
 
         // Important to checkpoint after reaching end of shard, so we can start
         // processing data from child shards.
         if (reason == ShutdownReason.TERMINATE) {
             try {
-                agg.shutdown(true);
+                this.agg.shutdown(true);
                 checkpoint(checkpointer);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -105,7 +112,7 @@ public class AggregatorProcessor implements IRecordProcessor {
         } else {
             // shutdown the aggregator without flushing state
             try {
-                agg.shutdown(false);
+                this.agg.shutdown(false);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -118,8 +125,8 @@ public class AggregatorProcessor implements IRecordProcessor {
      * @param checkpointer
      */
     private void checkpoint(IRecordProcessorCheckpointer checkpointer) {
-        LOG.info("Checkpointing shard " + kinesisShardId);
-        for (int i = 0; i < NUM_RETRIES; i++) {
+        LOG.info("Checkpointing shard " + this.kinesisShardId);
+        for (int i = 0; i < this.NUM_RETRIES; i++) {
             try {
                 checkpointer.checkpoint();
                 break;
@@ -130,12 +137,12 @@ public class AggregatorProcessor implements IRecordProcessor {
                 break;
             } catch (ThrottlingException e) {
                 // Backoff and re-attempt checkpoint upon transient failures
-                if (i >= (NUM_RETRIES - 1)) {
+                if (i >= (this.NUM_RETRIES - 1)) {
                     LOG.error("Checkpoint failed after " + (i + 1) + "attempts.", e);
                     break;
                 } else {
                     LOG.info("Transient issue when checkpointing - attempt " + (i + 1) + " of "
-                            + NUM_RETRIES, e);
+                            + this.NUM_RETRIES, e);
                 }
             } catch (InvalidStateException e) {
                 // This indicates an issue with the DynamoDB table (check for
@@ -146,7 +153,7 @@ public class AggregatorProcessor implements IRecordProcessor {
                 break;
             }
             try {
-                Thread.sleep(BACKOFF_TIME_IN_MILLIS);
+                Thread.sleep(this.BACKOFF_TIME_IN_MILLIS);
             } catch (InterruptedException e) {
                 LOG.debug("Interrupted sleep", e);
             }

@@ -142,7 +142,7 @@ public class StreamAggregator implements IStreamAggregator {
 
     private boolean isFirstShardWorker = false;
 
-    private final Log LOG = LogFactory.getLog(StreamAggregator.class);
+    private static final Log LOG = LogFactory.getLog(StreamAggregator.class);
 
     private Region region = null;
 
@@ -207,21 +207,21 @@ public class StreamAggregator implements IStreamAggregator {
 
     @Override
 	public void checkpoint() throws Exception {
-        cache.flush();
-        lowSeq = null;
+        this.cache.flush();
+        this.lowSeq = null;
 
         // update the worker inventory showing progress to the last sequence
         // value
-        inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
+        this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
                 this.lowSeq, this.highSeq.toString(), System.currentTimeMillis(),
                 InventoryModel.STATE.RUNNING);
 
         // warn and reset if there were any ignored records
-        if (ignoredRecordsBelowHWM > 0) {
+        if (this.ignoredRecordsBelowHWM > 0) {
             logWarn(String.format(
                     "Processed %s records which were ignored due to being below the current processing HWM",
-                    ignoredRecordsBelowHWM));
-            ignoredRecordsBelowHWM = 0;
+                    this.ignoredRecordsBelowHWM));
+            this.ignoredRecordsBelowHWM = 0;
         }
 
         LOG.debug("Aggregator Checkpoint for Shard " + this.shardId + " Complete");
@@ -271,8 +271,8 @@ public class StreamAggregator implements IStreamAggregator {
         AmazonKinesisClient kinesisClient = new AmazonKinesisClient(
                 this.config.getKinesisCredentialsProvider());
         if (this.config.getRegionName() != null) {
-            region = Region.getRegion(Regions.fromName(this.config.getRegionName()));
-            kinesisClient.setRegion(region);
+            this.region = Region.getRegion(Regions.fromName(this.config.getRegionName()));
+            kinesisClient.setRegion(this.region);
         }
 
         try {
@@ -305,20 +305,20 @@ public class StreamAggregator implements IStreamAggregator {
         ClientConfiguration clientConfig = new ClientConfiguration().withSocketTimeout(60000);
         this.dynamoClient = new AmazonDynamoDBAsyncClient(
                 this.config.getDynamoDBCredentialsProvider(), clientConfig);
-        if (region != null) {
-			this.dynamoClient.setRegion(region);
+        if (this.region != null) {
+			this.dynamoClient.setRegion(this.region);
 		}
 
         this.kinesisClient = new AmazonKinesisClient(this.config.getKinesisCredentialsProvider());
-        if (region != null) {
-			this.kinesisClient.setRegion(region);
+        if (this.region != null) {
+			this.kinesisClient.setRegion(this.region);
 		}
 
-        inventory = new InventoryModel(this.dynamoClient);
+        this.inventory = new InventoryModel(this.dynamoClient);
 
         // get the latest sequence number checkpointed for this named aggregator
         // on this shard
-        InventoryStatus lastUpdate = inventory.getLastUpdate(this.streamName, this.applicationName,
+        InventoryStatus lastUpdate = this.inventory.getLastUpdate(this.streamName, this.applicationName,
                 this.namespace, this.shardId);
         if (lastUpdate != null && lastUpdate.getHighSeq() != null) {
             // set the current high sequence to the last high sequence
@@ -326,12 +326,12 @@ public class StreamAggregator implements IStreamAggregator {
         }
 
         // log that we are now starting up
-        inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId, null,
+        this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId, null,
                 null, System.currentTimeMillis(), InventoryModel.STATE.STARTING);
 
         // set the table name we will use for aggregated values
         if (this.tableName == null) {
-            this.tableName = StreamAggregatorUtils.getTableName(config.getApplicationName(),
+            this.tableName = StreamAggregatorUtils.getTableName(this.config.getApplicationName(),
                     this.getNamespace());
         }
 
@@ -340,9 +340,9 @@ public class StreamAggregator implements IStreamAggregator {
 		}
 
         // resolve the basic data being aggregated
-        String labelColumn = StreamAggregatorUtils.methodToColumn(dataExtractor.getAggregateLabelName());
-        String dateColumn = dataExtractor.getDateValueName() == null ? DEFAULT_DATE_VALUE
-                : dataExtractor.getDateValueName();
+        String labelColumn = StreamAggregatorUtils.methodToColumn(this.dataExtractor.getAggregateLabelName());
+        String dateColumn = this.dataExtractor.getDateValueName() == null ? DEFAULT_DATE_VALUE
+                : this.dataExtractor.getDateValueName();
 
         // configure the default dynamo data store
         if (this.dataStore == null) {
@@ -350,14 +350,14 @@ public class StreamAggregator implements IStreamAggregator {
                     this.aggregatorType, this.streamName, this.tableName, labelColumn, dateColumn).withStorageCapacity(
                     this.readCapacity, this.writeCapacity)
                     .withTagAttrib(this.tagAttrib);
-            this.dataStore.setRegion(region);
+            this.dataStore.setRegion(this.region);
             
             LOG.debug("Init data store, using tag name: " + this.tagAttrib);
         }
         this.dataStore.initialise();
         
         // configure the cache so it can do its work
-        cache = new AggregateCache(this.shardId).withCredentials(
+        this.cache = new AggregateCache(this.shardId).withCredentials(
                 this.config.getKinesisCredentialsProvider()).withAggregateType(this.aggregatorType).withTableName(
                 this.tableName).withLabelColumn(labelColumn).withDateColumn(dateColumn).withDataStore(
                 this.dataStore)
@@ -371,15 +371,15 @@ public class StreamAggregator implements IStreamAggregator {
 
         if (this.metricsEmitter != null) {
             if (this.config.getRegionName() != null) {
-				this.metricsEmitter.setRegion(region);
+				this.metricsEmitter.setRegion(this.region);
 			}
         }
         // add the metrics publisher to the cache if we are bound to the lowest
         // shard
         if (this.metricsEmitter != null) {
-            cache.withMetricsEmitter(this.metricsEmitter);
+            this.cache.withMetricsEmitter(this.metricsEmitter);
         }
-        cache.initialise();
+        this.cache.initialise();
         
 
         // set the user agent
@@ -392,19 +392,19 @@ public class StreamAggregator implements IStreamAggregator {
 
         // log startup state
         StringBuffer sb = new StringBuffer();
-        for (TimeHorizon t : timeHorizons) {
+        for (TimeHorizon t : this.timeHorizons) {
             sb.append(String.format("%s,", t.name()));
         }
         sb.deleteCharAt(sb.length() - 1);
 
         logInfo(String.format(
                 "Amazon Kinesis Stream Aggregator Online\nStream: %s\nApplication: %s\nNamespace: %s\nWorker: %s\nGranularity: %s\nContent Extracted With: %s",
-                streamName, applicationName, this.namespace, this.config.getWorkerIdentifier(),
-                sb.toString(), dataExtractor.getClass().getName()));
+                this.streamName, this.applicationName, this.namespace, this.config.getWorkerIdentifier(),
+                sb.toString(), this.dataExtractor.getClass().getName()));
         if (this.highSeq != null) {
 			logInfo(String.format("Processing Data from Seq: %s", this.highSeq));
 		}
-        online = true;
+        this.online = true;
     }
 
     private void validateConfig() throws Exception {
@@ -643,8 +643,8 @@ public class StreamAggregator implements IStreamAggregator {
 			checkpoint();
 		}
 
-        if (inventory != null) {
-			inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
+        if (this.inventory != null) {
+			this.inventory.update(this.streamName, this.applicationName, this.namespace, this.shardId,
                     null, null, System.currentTimeMillis(),
                     withState == null ? InventoryModel.STATE.STOPPED : withState);
 		}
@@ -670,15 +670,19 @@ public class StreamAggregator implements IStreamAggregator {
      */
     @Override
 	public void aggregateEvents(List<InputEvent> events) throws Exception {
-        start = System.currentTimeMillis();
+        this.start = System.currentTimeMillis();
         int aggregatedEventCount = 0;
         int aggregatedElementCount = 0;
 
-        if (!online) {
+        if (!this.online) {
             throw new Exception("Aggregator Not Initialised");
         }
+        
+        int eventCnt = (events == null) ? 0 : events.size();
+        
+        LOG.debug("aggregating events: " + eventCnt);
 
-        BigInteger thisSequence;
+        BigInteger thisSequence = null;
         List<AggregateData> extractedItems = null;
         Date eventDate = null;
 
@@ -692,24 +696,24 @@ public class StreamAggregator implements IStreamAggregator {
                     // ignore any records which are going backward with regard
                     // to
                     // the current hwm
-                    if (highSeq != null && highSeq.compareTo(thisSequence) != -1) {
-                        ignoredRecordsBelowHWM++;
+                    if (this.highSeq != null && this.highSeq.compareTo(thisSequence) != -1) {
+                        this.ignoredRecordsBelowHWM++;
                         continue;
                     }
                 }
 
                 // set the low sequence if this is the first record received
                 // after a flush
-                if (lowSeq == null) {
-					lowSeq = event.getSequenceNumber();
+                if (this.lowSeq == null) {
+					this.lowSeq = event.getSequenceNumber();
 				}
 
                 // high sequence is always the latest value
-                highSeq = new BigInteger(event.getSequenceNumber());
+                this.highSeq = new BigInteger(event.getSequenceNumber());
 
                 // extract the data from the input event
                 try {
-                    extractedItems = dataExtractor.getData(event);
+                    extractedItems = this.dataExtractor.getData(event);
                 } catch (SerializationException se) {
                     // customer may have elected to suppress serialisation
                     // errors if the stream is expected have heterogenous data
@@ -750,13 +754,13 @@ public class StreamAggregator implements IStreamAggregator {
 
                         // generate the local updates, one per time horizon that
                         // is requested
-                        for (TimeHorizon h : timeHorizons) {
+                        for (TimeHorizon h : this.timeHorizons) {
                             // atomically update the aggregate table with event
                             // count or count + summaries
-                            cache.update(
-                                    aggregatorType,
+                            this.cache.update(
+                                    this.aggregatorType,
                                     data.getLabels(),
-                                    (timeHorizons.size() > 1 ? h.getItemWithMultiValueFormat(eventDate) : h.getValue(eventDate)),
+                                    (this.timeHorizons.size() > 1 ? h.getItemWithMultiValueFormat(eventDate) : h.getValue(eventDate)),
                                     h,
                                     event.getSequenceNumber(),
                                     1,
@@ -770,14 +774,33 @@ public class StreamAggregator implements IStreamAggregator {
 
             logInfo(String.format("Aggregation Complete - %s Records and %s Elements in %s ms",
                     aggregatedEventCount, aggregatedElementCount,
-                    (System.currentTimeMillis() - start)));
+                    (System.currentTimeMillis() - this.start)));
+            
         } catch (SerializationException se) {
             shutdown(true, InventoryModel.STATE.SERIALISATION_ERROR);
             LOG.error(se);
             throw se;
         } catch (Exception e) {
             shutdown(true, InventoryModel.STATE.UNKNOWN_ERROR);
-            LOG.error(e);
+            
+            LOG.error("Exception thrown trying to aggregate events; cnt: " + eventCnt, e);
+            
+            for (InputEvent event : events)
+            {
+            	LOG.error("event data: " + event);
+            }
+            
+            LOG.error("ending sequence: " + thisSequence);
+            LOG.error("ending eventDate: " + eventDate);
+            
+            if (extractedItems != null)
+            {
+            	for (AggregateData aggData : extractedItems)
+            	{
+            		LOG.error("AggregateData we pulled: " + aggData);
+            	}
+            }
+            
             throw e;
         }
     }
