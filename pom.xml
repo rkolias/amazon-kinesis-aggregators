@@ -5,7 +5,7 @@
 	<groupId>com.amazonaws</groupId>
 	<artifactId>amazon-kinesis-aggregators</artifactId>
 
-	<version>.9.2.6.8-SNAPSHOT</version>
+	<version>.9.3.0.0</version>
 	<packaging>jar</packaging>
 	
 	<properties>
@@ -190,7 +190,7 @@
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>amazon-kinesis-client</artifactId>
-			<version>1.7.2</version>
+			<version>1.11.2</version>
 			<exclusions>
 				<exclusion>
 					<artifactId>aws-java-sdk</artifactId>
