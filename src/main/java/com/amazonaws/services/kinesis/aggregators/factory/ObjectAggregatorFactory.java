@@ -18,11 +18,13 @@ package com.amazonaws.services.kinesis.aggregators.factory;
 
 import java.util.Arrays;
 import java.util.List;
+
 import com.amazonaws.services.kinesis.aggregators.AggregatorType;
 import com.amazonaws.services.kinesis.aggregators.StreamAggregator;
 import com.amazonaws.services.kinesis.aggregators.TimeHorizon;
 import com.amazonaws.services.kinesis.aggregators.annotations.AnnotationProcessor;
 import com.amazonaws.services.kinesis.aggregators.datastore.DynamoDataStore;
+import com.amazonaws.services.kinesis.aggregators.datastore.IDataStore;
 import com.amazonaws.services.kinesis.aggregators.metrics.CloudWatchMetricsEmitter;
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration;
 import com.amazonaws.services.kinesis.io.IDataExtractor;
@@ -31,7 +33,7 @@ import com.amazonaws.services.kinesis.io.ObjectExtractor;
 public class ObjectAggregatorFactory {
     private ObjectAggregatorFactory() {
 	}
-	
+
 	/**
 	 * Create a new Aggregator for Object Serialised Data based upon a Class
 	 * which is configured using Annotations from the base class.
@@ -50,14 +52,14 @@ public class ObjectAggregatorFactory {
             KinesisClientLibConfiguration config, Class clazz) throws Exception {
 		AnnotationProcessor p = new AnnotationProcessor(clazz);
         ObjectExtractor dataExtractor = new ObjectExtractor(p.getLabelMethodNames(), clazz).withDateMethod(p.getDateMethodName());
-		
+
 		dataExtractor.withSummaryConfig(p.getSummaryConfig());
         //dataExtractor.withSummaryMethods(new ArrayList<>(p.getSummaryMethods().keySet()));
-		
+
 		StreamAggregator agg = new StreamAggregator(streamName, appName, p.getNamespace(), config,
                 dataExtractor).withTimeHorizon(p.getTimeHorizon()).withAggregatorType(p.getType()).withRaiseExceptionOnDataExtractionErrors(
                 p.shouldFailOnDataExtractionErrors());
-		
+
 		// configure metrics service on the aggregator if it's been
 		// configured
 		if (p.shouldEmitMetrics()
@@ -69,19 +71,19 @@ public class ObjectAggregatorFactory {
 				agg.withCloudWatchMetrics();
 			}
 		}
-		
+
 		// create a new instance of the Data Store if one has been
 		// configured. Currently we only support pluggable data stores that
 		// are configured via their environment or have self defined
 		// configuration models: only no args public constructors can be
 		// called
 		if (p.getDataStore() != null && !p.getDataStore().equals(DynamoDataStore.class)) {
-			agg.withDataStore(p.getDataStore().newInstance());
+            agg.withDataStore((IDataStore) p.getDataStore().newInstance());
 		}
-		
+
 		return agg;
 	}
-	
+
 	/**
 	 * Create a new Aggregator for data which is object serialised on the stream
 	 * using Jackson JSON Serialisation.
@@ -113,11 +115,11 @@ public class ObjectAggregatorFactory {
             KinesisClientLibConfiguration config, String namespace, TimeHorizon timeHorizon,
             AggregatorType aggregatorType, Class clazz, List<String> labelMethods,
             String dateMethod, List<String> summaryMethods) throws Exception {
-		return newInstance(streamName, appName, config, namespace, 
+        return newInstance(streamName, appName, config, namespace,
                 Arrays.asList(new TimeHorizon[] { timeHorizon }), aggregatorType, clazz,
 		    labelMethods, dateMethod, summaryMethods);
 	}
-	
+
 	/**
 	 * Create a new Aggregator for data which is object serialised on the stream
 	 * using Jackson JSON Serialisation.
@@ -148,18 +150,12 @@ public class ObjectAggregatorFactory {
 	 * @throws Exception
 	 */
 	public static final StreamAggregator newInstance(String streamName, String appName,
-		KinesisClientLibConfiguration config, String namespace,
-		List<TimeHorizon> timeHorizons, AggregatorType aggregatorType, Class clazz,
-		List<String> labelMethods, String dateMethod, List<String> summaryMethods)
-		throws Exception
-	{
-		
-		IDataExtractor dataExtractor = new ObjectExtractor(labelMethods, clazz)
-			.withDateMethod(dateMethod)
-			.withSummaryMethods(summaryMethods)
-			;
+            KinesisClientLibConfiguration config, String namespace, List<TimeHorizon> timeHorizons,
+            AggregatorType aggregatorType, Class clazz, List<String> labelMethods,
+            String dateMethod, List<String> summaryMethods) throws Exception {
+        IDataExtractor dataExtractor = new ObjectExtractor(labelMethods, clazz).withDateMethod(
+                dateMethod).withSummaryMethods(summaryMethods);
 		dataExtractor.setAggregatorType(aggregatorType);
-		
 		return new StreamAggregator(streamName, appName, namespace, config, dataExtractor).withTimeHorizon(
 			timeHorizons).withAggregatorType(aggregatorType);
 	}

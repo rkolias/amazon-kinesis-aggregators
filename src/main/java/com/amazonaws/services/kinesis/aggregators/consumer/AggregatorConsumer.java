@@ -41,8 +41,8 @@ public final class AggregatorConsumer {
 
     private static final Log LOG = LogFactory.getLog(AggregatorConsumer.class);
 
-    private String streamName, appName, regionName, environmentName, configFilePath,
-            positionInStream, kinesisEndpoint;
+	private String streamName, appName, regionName, environmentName,
+			configFilePath, positionInStream, kinesisEndpoint;
 
     private AWSCredentialsProvider credentialsProvider;
 
@@ -59,31 +59,36 @@ public final class AggregatorConsumer {
     private AggregatorGroup aggGroup;
 
     private boolean isConfigured = false;
+	private Worker worker;
 
-    public AggregatorConsumer(String streamName, String appName, String configFilePath) {
+	public AggregatorConsumer(String streamName, String appName,
+			String configFilePath) {
         this.streamName = streamName;
         this.appName = appName;
         this.configFilePath = configFilePath;
     }
 
     private AggregatorGroup buildAggregatorsFromConfig() throws Exception {
-        return ExternallyConfiguredAggregatorFactory.buildFromConfig(this.streamName, this.appName,
-                this.config, configFilePath);
+		return ExternallyConfiguredAggregatorFactory.buildFromConfig(
+				this.streamName, this.appName, this.config, configFilePath);
 
     }
 
     public void shutdown() throws Exception {
         this.aggGroup.shutdown(true);
+		worker.shutdown();
     }
 
     public int run() throws Exception {
         configure();
 
         System.out.println(String.format("Starting %s", appName));
-        LOG.info(String.format("Running %s to process stream %s", appName, streamName));
+		LOG.info(String.format("Running %s to process stream %s", appName,
+				streamName));
 
-        IRecordProcessorFactory recordProcessorFactory = new AggregatorProcessorFactory(aggGroup);
-        Worker worker = new Worker(recordProcessorFactory, this.config);
+		IRecordProcessorFactory recordProcessorFactory = new AggregatorProcessorFactory(
+				aggGroup);
+		worker = new Worker(recordProcessorFactory, this.config);
 
         int exitCode = 0;
         int failures = 0;
@@ -99,6 +104,8 @@ public final class AggregatorConsumer {
 
                 if (failures < failuresToTolerate) {
                     LOG.error("Restarting...");
+				} else {
+					shutdown();
                 }
                 exitCode = 1;
             }
@@ -127,7 +134,8 @@ public final class AggregatorConsumer {
             validateConfig();
 
             if (this.positionInStream != null) {
-                streamPosition = InitialPositionInStream.valueOf(this.positionInStream);
+				streamPosition = InitialPositionInStream
+						.valueOf(this.positionInStream);
             } else {
                 streamPosition = InitialPositionInStream.LATEST;
             }
@@ -139,9 +147,11 @@ public final class AggregatorConsumer {
 
             // ensure the JVM will refresh the cached IP values of AWS resources
             // (e.g. service endpoints).
-            java.security.Security.setProperty("networkaddress.cache.ttl", "60");
+			java.security.Security
+					.setProperty("networkaddress.cache.ttl", "60");
 
-            String workerId = NetworkInterface.getNetworkInterfaces() + ":" + UUID.randomUUID();
+			String workerId = NetworkInterface.getNetworkInterfaces() + ":"
+					+ UUID.randomUUID();
             LOG.info("Using Worker ID: " + workerId);
 
             // obtain credentials using the default provider chain or the
@@ -152,11 +162,12 @@ public final class AggregatorConsumer {
             LOG.info("Using credentials with Access Key ID: "
                     + credentialsProvider.getCredentials().getAWSAccessKeyId());
 
-            config = new KinesisClientLibConfiguration(appName, streamName, credentialsProvider,
-                    workerId).withInitialPositionInStream(streamPosition).withKinesisEndpoint(
-                    kinesisEndpoint);
+			config = new KinesisClientLibConfiguration(appName, streamName,
+					credentialsProvider, workerId).withInitialPositionInStream(
+					streamPosition).withKinesisEndpoint(kinesisEndpoint);
 
-            config.getKinesisClientConfiguration().setUserAgent(StreamAggregator.AWSApplication);
+			config.getKinesisClientConfiguration().setUserAgent(
+					StreamAggregator.AWSApplication);
 
             if (regionName != null) {
                 Region region = Region.getRegion(Regions.fromName(regionName));
@@ -169,10 +180,12 @@ public final class AggregatorConsumer {
             // initialise the Aggregators
             aggGroup = buildAggregatorsFromConfig();
 
-            LOG.info(String.format(
-                    "Amazon Kinesis Aggregators Managed Client prepared for %s on %s in %s (%s) using %s Max Records",
-                    config.getApplicationName(), config.getStreamName(), config.getRegionName(),
-                    config.getWorkerIdentifier(), config.getMaxRecords()));
+			LOG.info(String
+					.format("Amazon Kinesis Aggregators Managed Client prepared for %s on %s in %s (%s) using %s Max Records",
+							config.getApplicationName(),
+							config.getStreamName(), config.getRegionName(),
+							config.getWorkerIdentifier(),
+							config.getMaxRecords()));
 
             isConfigured = true;
         }
@@ -203,12 +216,14 @@ public final class AggregatorConsumer {
         return this;
     }
 
-    public AggregatorConsumer withCredentialsProvider(AWSCredentialsProvider credentialsProvider) {
+	public AggregatorConsumer withCredentialsProvider(
+			AWSCredentialsProvider credentialsProvider) {
         this.credentialsProvider = credentialsProvider;
         return this;
     }
 
-    public AggregatorConsumer withInitialPositionInStream(String positionInStream) {
+	public AggregatorConsumer withInitialPositionInStream(
+			String positionInStream) {
         this.positionInStream = positionInStream;
         return this;
     }
@@ -223,16 +238,25 @@ public final class AggregatorConsumer {
     }
 
     public static void main(String[] args) throws Exception {
-        String streamName = System.getProperty(AggregatorsConstants.STREAM_NAME_PARAM);
-        String appName = System.getProperty(AggregatorsConstants.APP_NAME_PARAM);
-        String configFilePath = System.getProperty(AggregatorsConstants.CONFIG_PATH_PARAM);
-        String regionName = System.getProperty(AggregatorsConstants.REGION_PARAM);
-        String failuresToTolerate = System.getProperty(AggregatorsConstants.FAILURES_TOLERATED_PARAM);
-        String maxRecords = System.getProperty(AggregatorsConstants.MAX_RECORDS_PARAM);
-        String environmentName = System.getProperty(AggregatorsConstants.ENVIRONMENT_PARAM);
-        String positionInStream = System.getProperty(AggregatorsConstants.STREAM_POSITION_PARAM);
+		String streamName = System
+				.getProperty(AggregatorsConstants.STREAM_NAME_PARAM);
+		String appName = System
+				.getProperty(AggregatorsConstants.APP_NAME_PARAM);
+		String configFilePath = System
+				.getProperty(AggregatorsConstants.CONFIG_PATH_PARAM);
+		String regionName = System
+				.getProperty(AggregatorsConstants.REGION_PARAM);
+		String failuresToTolerate = System
+				.getProperty(AggregatorsConstants.FAILURES_TOLERATED_PARAM);
+		String maxRecords = System
+				.getProperty(AggregatorsConstants.MAX_RECORDS_PARAM);
+		String environmentName = System
+				.getProperty(AggregatorsConstants.ENVIRONMENT_PARAM);
+		String positionInStream = System
+				.getProperty(AggregatorsConstants.STREAM_POSITION_PARAM);
 
-        AggregatorConsumer consumer = new AggregatorConsumer(streamName, appName, configFilePath);
+		AggregatorConsumer consumer = new AggregatorConsumer(streamName,
+				appName, configFilePath);
 
         // add optional configuration items
         if (regionName != null && regionName != "") {
@@ -240,7 +264,8 @@ public final class AggregatorConsumer {
         }
 
         if (failuresToTolerate != null && failuresToTolerate != "") {
-            consumer.withToleratedWorkerFailures(Integer.parseInt(failuresToTolerate));
+			consumer.withToleratedWorkerFailures(Integer
+					.parseInt(failuresToTolerate));
         }
 
         if (maxRecords != null && maxRecords != "") {

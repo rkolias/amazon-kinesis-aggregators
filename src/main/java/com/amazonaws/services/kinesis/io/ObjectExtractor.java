@@ -23,8 +23,10 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
 import com.amazonaws.services.kinesis.aggregators.AggregateData;
 import com.amazonaws.services.kinesis.aggregators.AggregatorType;
 import com.amazonaws.services.kinesis.aggregators.InputEvent;
@@ -115,7 +117,7 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         this(aggregateLabelMethods, clazz, null);
 
     }
-    
+
     /**
      * Create an Object Extractor using indicated serialisation for the class.
      * 
@@ -366,9 +368,8 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
         	
             this.aggregatorType = AggregatorType.SUM;
 
-            if (this.sumValueMap == null) {
+            if (this.sumValueMap == null)
 				this.sumValueMap = new HashMap<>();
-			}
 
             for (String s : summaryMethodName) {
                 this.summaryConfig.withConfigItem(s);
@@ -385,9 +386,8 @@ public class ObjectExtractor extends AbstractDataExtractor implements IDataExtra
     public ObjectExtractor withSummaryConfig(SummaryConfiguration config) {
         this.summaryConfig = config;
 
-        if (this.sumValueMap == null) {
+        if (this.sumValueMap == null)
 			this.sumValueMap = new HashMap<>();
-		}
 
         for (String s : this.summaryConfig.getItemSet()) {
             this.sumValueMap.put(s, null);

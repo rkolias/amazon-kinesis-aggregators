@@ -23,8 +23,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
@@ -55,13 +57,14 @@ import com.amazonaws.services.kinesis.aggregators.StreamAggregatorUtils;
 import com.amazonaws.services.kinesis.aggregators.cache.UpdateKey;
 import com.amazonaws.services.kinesis.aggregators.cache.UpdateValue;
 import com.amazonaws.services.kinesis.aggregators.summary.SummaryCalculation;
+import com.amazonaws.services.kinesis.model.ResourceNotFoundException;
 
 public class DynamoDataStore implements IDataStore {
     public enum DynamoSummaryUpdateMethod {
         PUT(AttributeAction.PUT), ADD(AttributeAction.ADD), CONDITIONAL(null);
         private AttributeAction action;
 
-        private DynamoSummaryUpdateMethod(final AttributeAction a) {
+        private DynamoSummaryUpdateMethod(AttributeAction a) {
             this.action = a;
         }
 
@@ -99,7 +102,7 @@ public class DynamoDataStore implements IDataStore {
     private long writeCapacity = DEFAULT_WRITE_CAPACITY;
 
     private String labelAttribute, dateAttribute;
-    
+
     private String tagAttrib;
     
     private boolean online = false;
@@ -448,11 +451,10 @@ public class DynamoDataStore implements IDataStore {
         List<Map<String, AttributeValue>> scannedItems = scan.getItems();
         for (Map<String, AttributeValue> map : scannedItems) {
             for (String s : map.keySet()) {
-                if (!columns.contains(s)) {
+                if (!columns.contains(s))
 					columns.add(s);
 				}
             }
-        }
 
         return columns;
     }
@@ -509,7 +511,6 @@ public class DynamoDataStore implements IDataStore {
                 attributes, key, gsi);
     }
 
-    @Override
 	public long refreshForceCheckpointThresholds() {
         LOG.info("Refreshing Provisioned Throughput settings");
 

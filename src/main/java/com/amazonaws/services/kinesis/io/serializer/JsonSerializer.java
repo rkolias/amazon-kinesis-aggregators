@@ -21,6 +21,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+
 import com.amazonaws.services.kinesis.aggregators.InputEvent;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,7 +69,6 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
-    @Override
 	@SuppressWarnings("unchecked")
     /**
      * Method to generate either a class instance from a Kinesis Record, or a String which will be converted to JsonMap if we are serialising text based payloads
@@ -102,7 +102,7 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
             }
         } else {
             // use jackson to serialise a class instance
-            return mapper.readValue(new String(event.getData(), this.charset), this.clazz);
+            return mapper.readValue(event.getData(), clazz);
         }
     }
 
@@ -111,7 +111,6 @@ public class JsonSerializer implements IKinesisSerializer<Object, byte[]> {
      * upon the serialiser config as either an object serialiser or a string
      * serialiser
      */
-    @Override
 	public byte[] fromClass(final Object o) throws IOException {
         if (this.clazz == null) {
             return SerializationUtils.safeReturnData(((String) o).getBytes(this.charset));

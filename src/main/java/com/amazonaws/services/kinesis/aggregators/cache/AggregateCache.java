@@ -18,8 +18,10 @@ package com.amazonaws.services.kinesis.aggregators.cache;
 
 import java.util.HashMap;
 import java.util.Map;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.regions.Region;
 import com.amazonaws.services.kinesis.aggregators.AggregatorType;
@@ -29,6 +31,7 @@ import com.amazonaws.services.kinesis.aggregators.TimeHorizon;
 import com.amazonaws.services.kinesis.aggregators.datastore.AggregateAttributeModification;
 import com.amazonaws.services.kinesis.aggregators.datastore.DynamoDataStore;
 import com.amazonaws.services.kinesis.aggregators.datastore.IDataStore;
+import com.amazonaws.services.kinesis.aggregators.exception.InvalidConfigurationException;
 import com.amazonaws.services.kinesis.aggregators.metrics.IMetricsEmitter;
 import com.amazonaws.services.kinesis.aggregators.summary.SummaryConfiguration;
 import com.amazonaws.services.kinesis.aggregators.summary.SummaryElement;
@@ -67,7 +70,7 @@ public class AggregateCache {
 
     private int forcedCount = 0;
 
-    private final Log LOG = LogFactory.getLog(AggregateCache.class);
+    private static final Log LOG = LogFactory.getLog(AggregateCache.class);
 
     private boolean online = false;
 
@@ -84,11 +87,11 @@ public class AggregateCache {
     }
 
     private void logInfo(String message) {
-        LOG.info("[" + this.shardId + "] " + message);
+		LOG.info("[" + this.shardId + "] " + message);
     }
 
     private void logWarn(String message) {
-        LOG.warn("[" + this.shardId + "] " + message);
+		LOG.warn("[" + this.shardId + "] " + message);
     }
 
     /**
@@ -97,39 +100,47 @@ public class AggregateCache {
      * @throws Exception
      */
     public void initialise() throws Exception {
-        if (pendingUpdates == null) {
-            pendingUpdates = new HashMap<>();
+		if (pendingUpdates == null) {
+			pendingUpdates = new HashMap<>();
         }
 
         // configure the default dynamo data store
         if (this.dataStore == null) {
-            this.dataStore = new DynamoDataStore(this.credentials, this.aggregatorType,
-                    this.streamName, this.tableName, this.labelName, dateName).withStorageCapacity(
-                    DynamoDataStore.DEFAULT_READ_CAPACITY, DynamoDataStore.DEFAULT_WRITE_CAPACITY)
-                    .withTagAttrib(this.tagAttrib)
-                    ;
-            this.dataStore.setRegion(region);
+			this.dataStore = new DynamoDataStore(this.credentials,
+					this.aggregatorType, this.streamName, this.tableName,
+					this.labelName, dateName).withStorageCapacity(
+					DynamoDataStore.DEFAULT_READ_CAPACITY,
+					DynamoDataStore.DEFAULT_WRITE_CAPACITY)
+				.withTagAttrib(this.tagAttrib);
+			this.dataStore.setRegion(region);
         }
         this.dataStore.initialise();
         
-        LOG.debug("Init data store, using tag name: " + this.tagAttrib);
+        this.LOG.debug("Init data store, using tag name: " + this.tagAttrib);
 
         // set the checkpointing thresholds based on the current io throughputs
         setCheckpointForcingThresholds();
+
+		LOG.info("Aggregator Cache Online\nIDataStore: "
+				+ this.getDataStore().getClass().getName()
+				+ "\n"
+				+ "IMetricsEmitter: "
+				+ (this.metricsEmitter == null ? "Null" : this.metricsEmitter
+						.getClass().getName()));
 
         this.online = true;
     }
 
     protected long getReportUpdatesPendingCount() {
-        return reportUpdatesPendingCount;
+		return reportUpdatesPendingCount;
     }
 
     protected long getWarnUpdatesPendingCount() {
-        return warnUpdatesPendingCount;
+		return warnUpdatesPendingCount;
     }
 
     protected long getForceCheckpointOnPendingUpdateCount() {
-        return forceCheckpointOnPendingUpdateCount;
+		return forceCheckpointOnPendingUpdateCount;
     }
 
     /* builder methods */
@@ -192,9 +203,14 @@ public class AggregateCache {
     protected void setCheckpointForcingThresholds() throws Exception {
         // set the force checkpoint level @ 4 minutes of write capacity, warning
         // at half that, and info an half the warning threshold
-        this.forceCheckpointOnPendingUpdateCount = this.dataStore.refreshForceCheckpointThresholds();
-        this.warnUpdatesPendingCount = (long) Math.ceil(this.forceCheckpointOnPendingUpdateCount / 2);
-        this.reportUpdatesPendingCount = (long) Math.ceil(this.warnUpdatesPendingCount / 2);
+		if (this.dataStore.refreshForceCheckpointThresholds() > 0) {
+			this.forceCheckpointOnPendingUpdateCount = this.dataStore
+					.refreshForceCheckpointThresholds();
+			this.warnUpdatesPendingCount = (long) Math
+					.ceil(this.forceCheckpointOnPendingUpdateCount / 2);
+			this.reportUpdatesPendingCount = (long) Math
+					.ceil(this.warnUpdatesPendingCount / 2);
+		}
     }
 
     /**
@@ -202,17 +218,22 @@ public class AggregateCache {
      * upon new events being consumed and calculated with the indicated
      * calculation.
      * 
-     * @param aggregatorType The type of Aggregator that the cache is being used
-     *        with
-     * @param fieldLabel The label value on which data will be aggregated
-     * @param dateValue The date value on which data will be aggregated
-     * @param seq The sequence number of the underlying Kinesis record which
+	 * @param aggregatorType
+	 *            The type of Aggregator that the cache is being used with
+	 * @param fieldLabel
+	 *            The label value on which data will be aggregated
+	 * @param dateValue
+	 *            The date value on which data will be aggregated
+	 * @param seq
+	 *            The sequence number of the underlying Kinesis record which
      *        generated the update
-     * @param countIncrement The increment of count for the item
-     * @param summedIncrements The set of summary values to be added to the
-     *        aggregate
-     * @param calculationConfig The configuration of what types of summaries
-     *        should be applied to the summed fields
+	 * @param countIncrement
+	 *            The increment of count for the item
+	 * @param summedIncrements
+	 *            The set of summary values to be added to the aggregate
+	 * @param calculationConfig
+	 *            The configuration of what types of summaries should be applied
+	 *            to the summed fields
      * @throws Exception
      */
     /*
@@ -236,7 +257,7 @@ public class AggregateCache {
         String tagValue
     	) throws Exception {
         // lazy validate the configuration
-        if (!online) {
+        if (!this.online) {
 			initialise();
 		}
 
@@ -244,9 +265,9 @@ public class AggregateCache {
         UpdateKey key = new UpdateKey(fieldLabel, this.dateName, dateValue, timeHorizon)
         	.withTagValue(tagValue);
         
-        LOG.debug("got tag value for cache update: " + tagValue);
+        this.LOG.debug("got tag value for cache update: " + tagValue);
         
-        UpdateValue payload = pendingUpdates.get(key);
+        UpdateValue payload = this.pendingUpdates.get(key);
         if (payload == null) {
             payload = new UpdateValue();
         }
@@ -258,15 +279,18 @@ public class AggregateCache {
         if (aggregatorType.equals(AggregatorType.SUM)) {
             // process all the requested calculations
             for (String s : calculationConfig.getItemSet()) {
-                for (SummaryElement e : calculationConfig.getRequestedCalculations(s)) {
+				for (SummaryElement e : calculationConfig
+						.getRequestedCalculations(s)) {
                     // be tolerant that not every summary item may be present on
                     // every extracted item
                     if (summedIncrements.containsKey(s)) {
                         payload.updateSummary(e.getAttributeAlias(),
-                                summedIncrements.get(e.getStreamDataElement()), e);
+								summedIncrements.get(e.getStreamDataElement()),
+								e);
                     } else {
-                        logWarn(String.format(
-                                "Summary Item '%s' not found in Extracted Data - Ignoring", s));
+						logWarn(String
+								.format("Summary Item '%s' not found in Extracted Data - Ignoring",
+										s));
                     }
                 }
             }
@@ -276,39 +300,48 @@ public class AggregateCache {
         payload.lastWrite(seq, System.currentTimeMillis());
 
         // write the updates back
-        pendingUpdates.put(key, payload);
+        this.pendingUpdates.put(key, payload);
 
         // put some nags into the log to remind an implementer to checkpoint
         // periodically
-        if (pendingUpdates.size() % reportUpdatesPendingCount == 0) {
-            logInfo(String.format("%s Pending Aggregates to be flushed", pendingUpdates.size()));
+		if (this.reportUpdatesPendingCount > 0) {
+        if (this.pendingUpdates.size() % this.reportUpdatesPendingCount == 0) {
+				logInfo(String.format("%s Pending Aggregates to be flushed",
+						this.pendingUpdates.size()));
+			}
         }
 
-        if (pendingUpdates.size() > warnUpdatesPendingCount) {
-            logWarn(String.format("Warning - %s Pending Aggregates - Checkpoint NOW",
-                    pendingUpdates.size()));
+		if (this.warnUpdatesPendingCount > 0) {
+        if (this.pendingUpdates.size() > this.warnUpdatesPendingCount) {
+				logWarn(String.format(
+						"Warning - %s Pending Aggregates - Checkpoint NOW",
+                    this.pendingUpdates.size()));
         }
+		}
 
         // checkpoint manually at the force threshold to prevent the aggregator
         // falling over
-        if (pendingUpdates.size() > forceCheckpointOnPendingUpdateCount) {
-            logWarn(String.format(
-                    "Forcing checkpoint at %s Aggregates to avoid KCL Worker Disconnect - please ensure you have checkpointed the enclosing IRecordProcessor",
-                    pendingUpdates.size()));
+		if (this.forceCheckpointOnPendingUpdateCount > 0) {
+        if (this.pendingUpdates.size() > this.forceCheckpointOnPendingUpdateCount) {
+				logWarn(String
+						.format("Forcing checkpoint at %s Aggregates to avoid KCL Worker Disconnect - please ensure you have checkpointed the enclosing IRecordProcessor",
+                    this.pendingUpdates.size()));
             flush();
 
-            forcedCount++;
+            this.forcedCount++;
 
-            if (forcedCount % updateForceCheckpointFrequency == 0) {
-                // allow the system to refresh the force checkpoint thresholds
+            if (this.forcedCount % this.updateForceCheckpointFrequency == 0) {
+					// allow the system to refresh the force checkpoint
+					// thresholds
                 // periodically
                 setCheckpointForcingThresholds();
             }
         }
     }
+	}
 
     public UpdateValue get(UpdateKey key) {
-        return pendingUpdates.get(key);
+        return this.pendingUpdates.get(key);
     }
 
     protected IDataStore getDataStore() {
@@ -325,25 +358,29 @@ public class AggregateCache {
      */
     public synchronized void flush() throws Exception {
         long startTime = System.currentTimeMillis();
-        Map<UpdateKey, Map<String, AggregateAttributeModification>> dataModifications = this.dataStore.write(pendingUpdates);
-        logInfo(String.format("Cache Flushed %s modifications in %sms", this.pendingUpdates.size(),
+		Map<UpdateKey, Map<String, AggregateAttributeModification>> dataModifications = this.dataStore
+				.write(this.pendingUpdates);
+		logInfo(String.format("Cache Flushed %s modifications in %sms",
+				this.pendingUpdates.size(),
                 (System.currentTimeMillis() - startTime)));
 
         // publish the cloudwatch metrics
-        if (this.metricsEmitter != null) {
+		if (this.metricsEmitter != null)
+		{
 			try {
                 startTime = System.currentTimeMillis();
                 this.metricsEmitter.emit(dataModifications);
-                logInfo(String.format("Instrumentation Dispatched to Metrics Service in %sms",
+				logInfo(String
+						.format("Instrumentation Dispatched to Metrics Service in %sms",
                         (System.currentTimeMillis() - startTime)));
             } catch (Exception e) {
                 // log the error but do not fail
-                LOG.error("Metrics Emitter Exception - Aggregate Cache will NOT terminate");
-                LOG.error(e);
+                this.LOG.error("Metrics Emitter Exception - Aggregate Cache will NOT terminate");
+                this.LOG.error(e);
             }
 		}
 
-        pendingUpdates = new HashMap<>();
+        this.pendingUpdates = new HashMap<>();
     }
     
     /**
